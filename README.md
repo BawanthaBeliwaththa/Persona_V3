@@ -303,10 +303,10 @@ Used to parse the "About" section.
 Parses the **first** experience entry (the current job). Finds the `Experience` header line, then captures lines until the next section marker. Returns a dictionary:
 ```json
 {
-  "title": "Web Developer",
-  "company": "Freelance",
-  "duration": "Jan 2022 - Present · 4 yrs 6 mos",
-  "location": "Sri Lanka"
+  "title": "Project Head (St. Mary's College Website)",
+  "company": "St. Mary's College, Kegalle",
+  "duration": "2023 - Present",
+  "location": "Kegalle, Sri Lanka"
 }
 ```
 
@@ -321,9 +321,9 @@ Same as `_parse_experience` but groups all lines under the Experience section in
 Finds the `Education` header, captures lines until the next section marker, and groups them into blocks of 3 lines each:
 ```json
 {
-  "institution": "University of Kelaniya",
-  "degree": "BSc in Data Science",
-  "dates": "2021 – 2025"
+  "institution": "University of Hertfordshire",
+  "degree": "BSc (Hons) in Data Science",
+  "dates": "2024 – 2028"
 }
 ```
 
@@ -381,10 +381,10 @@ Finds `Languages`, captures lines, and for each pair checks if the second line c
 Finds `Projects`, groups into blocks of 4 (title, dates, associated_with, description):
 ```json
 {
-  "title": "LinkedIn Profile Scraper V4",
-  "dates": "2026 – Present",
-  "associated_with": "Freelance",
-  "description": "Developed a full-stack profile scraper using Playwright and Flask."
+  "title": "Project P_HACK",
+  "dates": "2023 – Present",
+  "associated_with": "GitHub",
+  "description": "Collection of Python scripts for system security checks, password analysis, and scanning tools."
 }
 ```
 
@@ -571,33 +571,44 @@ Every scraped profile is saved as a JSON object with the following 25 fields:
 ```json
 {
   "name": "Bawantha Beliwaththa",
-  "headline": "Web Developer | Data Science Student",
-  "location": "Sri Lanka",
+  "headline": "BSc (Hons) Data Science Undergrad | Developer",
+  "location": "Kegalle, Sabaragamuwa, Sri Lanka",
   "profile_picture": "https://avatars.githubusercontent.com/u/85686518?v=4",
   "connections": "500+",
-  "about": "A passionate web developer and data science student specializing in python, javascript and machine learning models.",
+  "about": "BSc (Hons) Data Science undergraduate student at the University of Hertfordshire. A technology enthusiast interested in Data Science, Machine Learning, Web Development, and Cybersecurity.",
   "email": "bawantha@example.com",
   "phone": "+94 77 111 2222",
-  "website": "https://github.com/beliwaththa",
+  "website": "https://bawanthabeliwaththa.github.io/",
   "current_job": {
-    "title": "Web Developer",
-    "company": "Freelance",
-    "duration": "Jan 2022 - Present · 4 yrs 6 mos",
-    "location": "Sri Lanka"
+    "title": "Project Head (St. Mary's College Website)",
+    "company": "St. Mary's College, Kegalle",
+    "duration": "2023 - Present",
+    "location": "Kegalle, Sri Lanka"
   },
   "experiences": [
     {
-      "title": "Web Developer",
-      "company": "Freelance",
-      "duration": "Jan 2022 - Present · 4 yrs 6 mos",
-      "location": "Sri Lanka"
+      "title": "Project Head (St. Mary's College Website)",
+      "company": "St. Mary's College, Kegalle",
+      "duration": "2023 - Present",
+      "location": "Kegalle, Sri Lanka"
+    },
+    {
+      "title": "IT Club President & Prefect",
+      "company": "St. Mary's College, Kegalle",
+      "duration": "2021 - 2022",
+      "location": "Kegalle, Sri Lanka"
     }
   ],
   "education": [
     {
-      "institution": "University of Kelaniya",
-      "degree": "BSc in Data Science",
-      "dates": "2021 – 2025"
+      "institution": "University of Hertfordshire",
+      "degree": "BSc (Hons) in Data Science",
+      "dates": "2024 – 2028"
+    },
+    {
+      "institution": "St. Mary's College, Kegalle",
+      "degree": "GCE Advanced Level",
+      "dates": "2019 – 2022"
     }
   ],
   "certifications": [
@@ -613,16 +624,24 @@ Every scraped profile is saved as a JSON object with the following 25 fields:
       "endorsements": "47"
     },
     {
-      "skill": "JavaScript",
-      "endorsements": "32"
+      "skill": "Data Science",
+      "endorsements": "35"
+    },
+    {
+      "skill": "Web Development",
+      "endorsements": "28"
+    },
+    {
+      "skill": "Cybersecurity",
+      "endorsements": "15"
     }
   ],
   "honors": [
     {
-      "title": "Best Hackathon Project",
-      "issuer": "University Hackathon",
-      "date": "2023",
-      "description": "Awarded for developing an automated web scraper."
+      "title": "IT Club President Selection",
+      "issuer": "St. Mary's College, Kegalle",
+      "date": "2021",
+      "description": "Selected to lead the college IT club activities and project team."
     }
   ],
   "languages": [
@@ -637,18 +656,24 @@ Every scraped profile is saved as a JSON object with the following 25 fields:
   ],
   "projects": [
     {
-      "title": "LinkedIn Profile Scraper V4",
-      "dates": "2026 – Present",
-      "associated_with": "Freelance",
-      "description": "Developed a full-stack profile scraper using Playwright and Flask."
+      "title": "Project P_HACK",
+      "dates": "2023 – Present",
+      "associated_with": "GitHub",
+      "description": "Collection of Python scripts for system security checks, password analysis, and scanning tools."
+    },
+    {
+      "title": "Automatic Short Answer Grading Dataset",
+      "dates": "2023",
+      "associated_with": "Kaggle",
+      "description": "Created and curated a dataset for automated grading tasks."
     }
   ],
   "volunteer": [
     {
       "role": "Volunteer Developer",
-      "organization": "Open Source Community",
+      "organization": "SMC Kegalle Devs Team",
       "duration": "2022 – Present",
-      "cause": "Science and Technology"
+      "cause": "Education"
     }
   ],
   "publications": [],
@@ -660,9 +685,10 @@ Every scraped profile is saved as a JSON object with the following 25 fields:
   ],
   "recommendations": [],
   "interests": [
-    "Python",
+    "Data Science",
     "Machine Learning",
-    "Open Source"
+    "Cybersecurity",
+    "Programming Pub"
   ],
   "profile_url": "https://www.linkedin.com/in/beliwaththa",
   "scraped_at": "2026-06-09T08:14:53.081857"
