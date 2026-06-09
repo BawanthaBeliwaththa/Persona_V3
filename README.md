@@ -1,4 +1,4 @@
-# LinkedIn Profile Scraper V4
+# LinkedIn Profile Scraper V3
 
 > **A full-stack LinkedIn profile intelligence platform** — scrapes every visible section of any LinkedIn profile, stores structured data, and provides both a human-friendly web dashboard and a programmatic REST API for integration.
 
@@ -26,7 +26,7 @@
 
 ## 1. Project Overview
 
-LinkedIn Profile Scraper V4 is an automated system that:
+LinkedIn Profile Scraper V3 is an automated system that:
 
 - **Navigates** to any LinkedIn profile URL using a real Chromium browser controlled by Playwright.
 - **Scrolls and expands** all hidden sections (Experience, Education, Skills, Projects, etc.) by automatically clicking every "Show all" and "See more" button.
