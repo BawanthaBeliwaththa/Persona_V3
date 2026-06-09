@@ -1,0 +1,11 @@
+flask
+playwright
+requests
+beautifulsoup4
+pydantic
+openai
+python-dotenv
+aiohttp
+tenacity
+flask_cors
+fpdf
