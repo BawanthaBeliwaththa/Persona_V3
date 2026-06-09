@@ -1,4 +1,4 @@
-# LinkedIn Profile Scraper V3
+# LinkedIn Profile Scraper V4
 
 > **A full-stack LinkedIn profile intelligence platform** — scrapes every visible section of any LinkedIn profile, stores structured data, and provides both a human-friendly web dashboard and a programmatic REST API for integration.
 
@@ -26,7 +26,7 @@
 
 ## 1. Project Overview
 
-LinkedIn Profile Scraper V3 is an automated system that:
+LinkedIn Profile Scraper V4 is an automated system that:
 
 - **Navigates** to any LinkedIn profile URL using a real Chromium browser controlled by Playwright.
 - **Scrolls and expands** all hidden sections (Experience, Education, Skills, Projects, etc.) by automatically clicking every "Show all" and "See more" button.
@@ -570,106 +570,101 @@ Every scraped profile is saved as a JSON object with the following 25 fields:
 
 ```json
 {
-  "name": "Dr. Mothilal De Silva",
-  "headline": "Group Chairman Sri Lanka Telecom - Mobitel",
+  "name": "Bawantha Beliwaththa",
+  "headline": "Web Developer | Data Science Student",
   "location": "Sri Lanka",
-  "profile_picture": "https://media.licdn.com/dms/image/...",
+  "profile_picture": "https://avatars.githubusercontent.com/u/85686518?v=4",
   "connections": "500+",
-  "about": "Member of the High Level Advisory Council...",
-  "email": "contact@example.com",
-  "phone": "+94 77 123 4567",
-  "website": "https://example.com",
+  "about": "A passionate web developer and data science student specializing in python, javascript and machine learning models.",
+  "email": "bawantha@example.com",
+  "phone": "+94 77 111 2222",
+  "website": "https://github.com/beliwaththa",
   "current_job": {
-    "title": "Group Chairman Sri Lanka Telecom - Mobitel",
-    "company": "Sri Lanka Telecom",
-    "duration": "Nov 2024 - Present · 1 yr 8 mos",
+    "title": "Web Developer",
+    "company": "Freelance",
+    "duration": "Jan 2022 - Present · 4 yrs 6 mos",
     "location": "Sri Lanka"
   },
   "experiences": [
     {
-      "title": "Group Chairman Sri Lanka Telecom - Mobitel",
-      "company": "Sri Lanka Telecom",
-      "duration": "Nov 2024 - Present · 1 yr 8 mos",
+      "title": "Web Developer",
+      "company": "Freelance",
+      "duration": "Jan 2022 - Present · 4 yrs 6 mos",
       "location": "Sri Lanka"
     }
   ],
   "education": [
     {
-      "institution": "University of Moratuwa",
-      "degree": "BSc Engineering",
-      "dates": "1985 – 1990"
+      "institution": "University of Kelaniya",
+      "degree": "BSc in Data Science",
+      "dates": "2021 – 2025"
     }
   ],
   "certifications": [
     {
-      "name": "AWS Solutions Architect",
-      "issuer": "Amazon Web Services",
-      "date": "Issued Jan 2023"
+      "name": "Python for Data Science",
+      "issuer": "Coursera",
+      "date": "Issued Dec 2023"
     }
   ],
   "skills": [
     {
-      "skill": "Leadership",
-      "endorsements": "99+"
+      "skill": "Python",
+      "endorsements": "47"
+    },
+    {
+      "skill": "JavaScript",
+      "endorsements": "32"
     }
   ],
   "honors": [
     {
-      "title": "Best CTO Award",
-      "issuer": "SLASSCOM",
-      "date": "2021",
-      "description": "Awarded for digital transformation leadership"
+      "title": "Best Hackathon Project",
+      "issuer": "University Hackathon",
+      "date": "2023",
+      "description": "Awarded for developing an automated web scraper."
     }
   ],
   "languages": [
     {
       "language": "English",
+      "proficiency": "Professional working proficiency"
+    },
+    {
+      "language": "Sinhala",
       "proficiency": "Native or bilingual proficiency"
     }
   ],
   "projects": [
     {
-      "title": "National Broadband Project",
-      "dates": "2019 – 2021",
-      "associated_with": "Sri Lanka Telecom",
-      "description": "Led the nationwide fiber rollout..."
+      "title": "LinkedIn Profile Scraper V4",
+      "dates": "2026 – Present",
+      "associated_with": "Freelance",
+      "description": "Developed a full-stack profile scraper using Playwright and Flask."
     }
   ],
   "volunteer": [
     {
-      "role": "Mentor",
-      "organization": "IEEE Sri Lanka",
-      "duration": "2018 – Present",
-      "cause": "Education"
+      "role": "Volunteer Developer",
+      "organization": "Open Source Community",
+      "duration": "2022 – Present",
+      "cause": "Science and Technology"
     }
   ],
-  "publications": [
-    {
-      "title": "Telecommunications in Sri Lanka",
-      "publisher": "IEEE Transactions",
-      "date": "2020",
-      "description": "Comprehensive review of the sector..."
-    }
-  ],
+  "publications": [],
   "courses": [
     {
-      "name": "Executive Leadership Programme",
-      "associated_with": "Harvard Business School Online"
+      "name": "Machine Learning Specialization",
+      "associated_with": "DeepLearning.AI"
     }
   ],
-  "recommendations": [
-    {
-      "recommender": "Jane Smith",
-      "title": "VP at Dialog",
-      "text": "Exceptional leader with strategic vision..."
-    }
-  ],
+  "recommendations": [],
   "interests": [
-    "IEEE",
-    "World Economic Forum",
-    "Harvard Business Review"
+    "Python",
+    "Machine Learning",
+    "Open Source"
   ],
-  "profile_url": "https://www.linkedin.com/in/dr-mothilal-de-silva-387a2a",
+  "profile_url": "https://www.linkedin.com/in/beliwaththa",
   "scraped_at": "2026-06-09T08:14:53.081857"
 }
 ```
