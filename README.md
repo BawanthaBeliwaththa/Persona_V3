@@ -1,4 +1,4 @@
-# LinkedIn Profile Scraper V4
+# LinkedIn Profile Scraper V3
 
 > **A full-stack LinkedIn profile intelligence platform** — scrapes every visible section of any LinkedIn profile, stores structured data, and provides both a human-friendly web dashboard and a programmatic REST API for integration.
 
