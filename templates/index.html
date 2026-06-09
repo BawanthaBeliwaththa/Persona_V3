@@ -1,0 +1,941 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Persona - Linkedin Profile Extractor</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+            background: linear-gradient(135deg, #0a66c2 0%, #004182 50%, #0a66c2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .card {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 24px;
+            padding: 24px;
+            margin-bottom: 20px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+        }
+
+        .tabs {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 24px;
+            border-bottom: 2px solid #e5e7eb;
+            padding-bottom: 8px;
+        }
+
+        .tab-btn {
+            padding: 10px 20px;
+            border: none;
+            background: none;
+            cursor: pointer;
+            font-weight: 600;
+            border-radius: 8px;
+            transition: 0.3s;
+        }
+
+        .tab-btn.active {
+            background: #0a66c2;
+            color: white;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .form-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 16px;
+            margin-bottom: 20px;
+        }
+
+        input,
+        select {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+        }
+
+        label {
+            font-weight: 600;
+            margin-bottom: 5px;
+            display: block;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            transition: 0.2s;
+        }
+
+        .btn-primary {
+            background: #0a66c2;
+            color: white;
+        }
+
+        .btn-success {
+            background: #10b981;
+            color: white;
+        }
+
+        .btn-danger {
+            background: #ef4444;
+            color: white;
+        }
+
+        .btn-outline {
+            background: white;
+            border: 1px solid #ccc;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+        }
+
+        .btn-group {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+            margin-bottom: 20px;
+        }
+
+        .alert {
+            padding: 12px;
+            border-radius: 8px;
+            margin-top: 12px;
+        }
+
+        .alert-info {
+            background: #dbeafe;
+            color: #1e40af;
+        }
+
+        .alert-error {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        .alert-success {
+            background: #d1fae5;
+            color: #065f46;
+        }
+
+        .result-card {
+            background: white;
+            border: 1px solid #e5e7eb;
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 12px;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+
+        .result-card:hover {
+            border-color: #0a66c2;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        .profile-pic {
+            width: 100px;
+            height: 100px;
+            border-radius: 50%;
+            object-fit: cover;
+            margin-bottom: 12px;
+            border: 3px solid #0a66c2;
+        }
+
+        .section-title {
+            font-size: 18px;
+            font-weight: 700;
+            margin: 20px 0 10px;
+            padding-bottom: 6px;
+            border-bottom: 2px solid #0a66c2;
+            color: #0a66c2;
+        }
+
+        .full-text-box {
+            background: #f9fafb;
+            padding: 16px;
+            border-radius: 12px;
+            font-family: monospace;
+            font-size: 13px;
+            white-space: pre-wrap;
+            max-height: 500px;
+            overflow-y: auto;
+            border: 1px solid #e5e7eb;
+        }
+
+        .toast-container {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 1000;
+        }
+
+        .toast {
+            background: white;
+            border-left: 4px solid;
+            padding: 12px 20px;
+            margin-bottom: 8px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            animation: slideIn 0.3s;
+        }
+
+        @keyframes slideIn {
+            from {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <div class="card">
+            <h1><i class="fab fa-linkedin"></i> Persona - Linkedin Profile Extractor</h1>
+            <p>Extract every visible text from any LinkedIn profile</p>
+        </div>
+
+        <div class="card">
+            <div class="tabs">
+                <button class="tab-btn active" onclick="switchTab('setup')">Setup</button>
+                <button class="tab-btn" onclick="switchTab('search')">Search</button>
+                <button class="tab-btn" onclick="switchTab('results')">Results</button>
+                <button class="tab-btn" onclick="switchTab('approvals')">Pending Requests</button>
+            </div>
+
+            <!-- Setup Tab -->
+            <div id="setupTab" class="tab-content active">
+                <div class="form-grid">
+                    <div><label>LinkedIn Email</label><input type="email" id="email" placeholder="your@email.com"></div>
+                    <div><label>LinkedIn Password</label><input type="password" id="password"></div>
+                    <div><label>Session Name</label><input type="text" id="sessionName" value="default"></div>
+                </div>
+                <div class="btn-group">
+                    <button class="btn btn-primary" onclick="initializeScraper()" id="btnInit">Initialize
+                        Browser</button>
+                    <button class="btn btn-success" onclick="loginToLinkedIn()" id="btnLogin" disabled>Login</button>
+                    <button class="btn btn-danger" onclick="closeScraper()" id="btnClose" disabled>Close</button>
+                </div>
+                <div id="setupStatus"></div>
+                
+                <div style="margin-top: 35px; border-top: 2px solid #e5e7eb; padding-top: 25px;">
+                    <h3 style="color:#0a66c2; margin-bottom: 15px;"><i class="fas fa-database"></i> Master Scraped Database</h3>
+                    <p style="font-size:14px; color:#4b5563; margin-bottom: 15px;">Download the persistent, non-volatile database of all scraped profiles.</p>
+                    <div class="btn-group">
+                        <a href="/api/admin/download-db/json" class="btn btn-outline" style="text-decoration:none;"><i class="fas fa-file-code"></i> Download Master JSON</a>
+                        <a href="/api/admin/download-db/csv" class="btn btn-outline" style="text-decoration:none; border-color:#10b981; color:#10b981;"><i class="fas fa-file-csv"></i> Download Master CSV</a>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Search Tab -->
+            <div id="searchTab" class="tab-content">
+                <div class="form-grid">
+                    <div><label>Username (e.g., williamhgates)</label><input type="text" id="usernameKeyword"
+                            placeholder="LinkedIn username"></div>
+                    <div><label>First Name</label><input type="text" id="firstName" placeholder="First name"></div>
+                    <div><label>Last Name</label><input type="text" id="lastName" placeholder="Last name"></div>
+                    <div><label>Company (optional)</label><input type="text" id="company"></div>
+                    <div><label>Max Results</label><select id="maxResults">
+                            <option value="3">3</option>
+                            <option value="5" selected>5</option>
+                            <option value="10">10</option>
+                        </select></div>
+                </div>
+                <div class="btn-group">
+                    <button class="btn btn-primary" onclick="searchProfiles()" id="btnSearch" disabled>Search
+                        LinkedIn</button>
+                    <button class="btn btn-success" onclick="searchAndExtract()" id="btnSearchExtract" disabled>Search &
+                        Extract All</button>
+                </div>
+                <div id="searchStatus"></div>
+                <div id="searchResultsList" style="margin-top:20px;"></div>
+                
+                <div style="margin-top: 35px; border-top: 2px solid #e5e7eb; padding-top: 25px;">
+                    <h3 style="color:#0a66c2; margin-bottom: 15px;"><i class="fas fa-list-ul"></i> Pending Scrape Requests (Sorted by Request Time)</h3>
+                    <div id="pendingScrapesTableContainer">
+                        Loading requests...
+                    </div>
+                </div>
+            </div>
+
+            <!-- Results Tab -->
+            <div id="resultsTab" class="tab-content">
+                <div class="btn-group">
+                    <button class="btn btn-outline" onclick="exportData('json')"><i class="fas fa-file-code"></i> Export JSON</button>
+                    <button class="btn btn-outline" onclick="exportFullTextAsPDF()" style="border-color:#ef4444;color:#ef4444;"><i class="fas fa-file-pdf"></i> Export Full Text as PDF</button>
+                    <button class="btn btn-outline" onclick="clearResults()">Clear Results</button>
+                    <button class="btn btn-primary" onclick="destroyMasterDatabase()" style="background:#dc2626; border-color:#b91c1c; margin-left: auto;"><i class="fas fa-bomb"></i> Destroy All Data</button>
+                </div>
+                <div id="resultsContainer">No results yet.</div>
+                <div id="profileDetail" style="margin-top:20px;"></div>
+            </div>
+
+            <!-- Pending Requests Tab -->
+            <div id="approvalsTab" class="tab-content">
+                <div class="btn-group">
+                    <button class="btn btn-primary" onclick="loadApprovals()"><i class="fas fa-sync"></i> Refresh Requests</button>
+                </div>
+                <div id="approvalsTableContainer" style="margin-top: 20px; overflow-x: auto;">
+                    Loading requests...
+                </div>
+            </div>
+        </div>
+    </div>
+    <div id="toastContainer" class="toast-container"></div>
+
+    <script>
+        let state = { initialized: false, authenticated: false, currentProfiles: [], stats: { searches: 0, profiles: 0 } };
+        let settings = { headless: false, browserType: 'chromium' };
+
+        function escapeHtml(text) { if (!text) return ''; const div = document.createElement('div'); div.textContent = text; return div.innerHTML; }
+        function showToast(msg, type) { const container = document.getElementById('toastContainer'); const toast = document.createElement('div'); toast.className = 'toast'; toast.style.borderLeftColor = type === 'success' ? '#10b981' : type === 'error' ? '#ef4444' : '#3b82f6'; toast.innerHTML = `<span>${msg}</span>`; container.appendChild(toast); setTimeout(() => toast.remove(), 4000); }
+        function showAlert(elId, msg, type) { const el = document.getElementById(elId); if (el) el.innerHTML = `<div class="alert alert-${type}">${msg}</div>`; setTimeout(() => { if (el.querySelector('.alert')) el.innerHTML = ''; }, 5000); }
+        function updateUIState() { document.getElementById('btnInit').disabled = state.initialized; document.getElementById('btnLogin').disabled = !state.initialized || state.authenticated; document.getElementById('btnClose').disabled = !state.initialized; document.getElementById('btnSearch').disabled = !state.authenticated; document.getElementById('btnSearchExtract').disabled = !state.authenticated; }
+        function switchTab(tab) {
+            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+            document.getElementById(tab + 'Tab').classList.add('active');
+            Array.from(document.querySelectorAll('.tab-btn')).find(btn => btn.innerText.toLowerCase().includes(tab)).classList.add('active');
+            if (tab === 'approvals') { loadApprovals(); } else if (tab === 'search') { loadPendingScrapes(); }
+        }
+
+        async function initializeScraper() {
+            const btn = document.getElementById('btnInit'); btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Initializing...';
+            showAlert('setupStatus', 'Initializing browser...', 'info');
+            try {
+                const res = await fetch('/api/scraper/init', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ headless: settings.headless, browser_type: settings.browserType, session_name: document.getElementById('sessionName').value }) });
+                const data = await res.json();
+                if (data.success) { state.initialized = true; showToast('Browser initialized', 'success'); showAlert('setupStatus', 'Browser ready', 'success'); }
+                else { showAlert('setupStatus', 'Init failed: ' + data.error, 'error'); }
+            } catch (e) { showAlert('setupStatus', 'Error: ' + e.message, 'error'); }
+            finally { btn.disabled = false; btn.innerHTML = 'Initialize Browser'; updateUIState(); }
+        }
+        async function loginToLinkedIn() {
+            const email = document.getElementById('email').value.trim(), pwd = document.getElementById('password').value;
+            if (!email || !pwd) { showAlert('setupStatus', 'Enter email and password', 'warning'); return; }
+            const btn = document.getElementById('btnLogin'); btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Logging in...';
+            try {
+                const res = await fetch('/api/scraper/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password: pwd }) });
+                const data = await res.json();
+                if (data.success) { state.authenticated = true; showToast('Login successful', 'success'); showAlert('setupStatus', 'Logged in', 'success'); }
+                else { showAlert('setupStatus', 'Login failed', 'error'); }
+            } catch (e) { showAlert('setupStatus', 'Error: ' + e.message, 'error'); }
+            finally { btn.disabled = false; btn.innerHTML = 'Login'; updateUIState(); }
+        }
+        async function closeScraper() { await fetch('/api/scraper/close', { method: 'POST' }); state.initialized = false; state.authenticated = false; updateUIState(); clearResults(); showToast('Scraper closed', 'info'); }
+        function clearResults() { state.currentProfiles = []; document.getElementById('resultsContainer').innerHTML = 'No results.'; document.getElementById('profileDetail').innerHTML = ''; showToast('Results cleared', 'info'); }
+        async function exportData(format) { if (!state.currentProfiles.length) { showToast('No data to export', 'warning'); return; } try { const res = await fetch('/api/scraper/export', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ data: { profiles: state.currentProfiles }, format }) }); if (res.ok) { const blob = await res.blob(); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = `linkedin_export.${format}`; a.click(); URL.revokeObjectURL(url); showToast(`Exported as ${format}`, 'success'); } else { showToast('Export failed', 'error'); } } catch (e) { showToast('Export error: ' + e.message, 'error'); } }
+        async function exportFullTextAsPDF() { if (!state.currentProfiles.length) { showToast('No profiles to export', 'warning'); return; } let content = ""; state.currentProfiles.forEach((p, i) => { content += `PROFILE ${i + 1}: ${p.name || 'Unknown'}\nURL: ${p.profile_url}\n\n--- ABOUT ---\n${p.about || 'N/A'}\n\n--- CURRENT JOB ---\nTitle: ${p.current_job?.title || 'N/A'}\nCompany: ${p.current_job?.company || 'N/A'}\nDuration: ${p.current_job?.duration || 'N/A'}\n\n--- QUALIFICATIONS ---\n${(p.qualifications || []).map(q => `${q.institution} - ${q.degree} (${q.dates})`).join('\n') || 'N/A'}\n\n--- CERTIFICATIONS ---\n${(p.certifications || []).map(c => `${c.name} - ${c.issuer} (${c.date})`).join('\n') || 'N/A'}\n\n${'='.repeat(80)}\n\n`; }); try { const res = await fetch('/api/export-text-pdf', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: content }) }); if (res.ok) { const blob = await res.blob(); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = `linkedin_full_profile.pdf`; a.click(); URL.revokeObjectURL(url); showToast('PDF exported successfully', 'success'); } else { showToast('Export failed', 'error'); } } catch (e) { showToast('Export error: ' + e.message, 'error'); } }
+        async function searchProfiles() {
+            const username = document.getElementById('usernameKeyword').value.trim();
+            let firstName = document.getElementById('firstName').value.trim();
+            let lastName = document.getElementById('lastName').value.trim();
+            const company = document.getElementById('company').value.trim();
+            const maxResults = parseInt(document.getElementById('maxResults').value);
+            if (username) { firstName = username; lastName = ''; }
+            if (!firstName && !lastName) { showAlert('searchStatus', 'Enter username or name', 'warning'); return; }
+            const btn = document.getElementById('btnSearch'); btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Searching...';
+            try {
+                const res = await fetch('/api/scraper/search', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ first_name: firstName, last_name: lastName, company, max_results: maxResults }) });
+                const data = await res.json();
+                if (data.success) { displaySearchResults(data.results); showToast(`Found ${data.total} profiles`, 'success'); }
+                else { showAlert('searchStatus', data.error || 'No results', 'warning'); }
+            } catch (e) { showAlert('searchStatus', 'Error: ' + e.message, 'error'); }
+            finally { btn.disabled = false; btn.innerHTML = 'Search LinkedIn'; }
+        }
+        function displaySearchResults(results) {
+            const container = document.getElementById('searchResultsList');
+            if (!results.length) { container.innerHTML = '<p>No results found.</p>'; return; }
+            let html = '<h4>Click any profile to extract full text:</h4>';
+            results.forEach(profile => {
+                const initials = (profile.name || '?').split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
+                html += `<div class="result-card" onclick="extractProfileByUrl('${profile.profile_url}')">
+                        <div style="display:flex; align-items:center; gap:12px;">
+                            <div style="width:40px;height:40px;border-radius:50%;background:#0a66c2;color:white;display:flex;align-items:center;justify-content:center;font-weight:bold;">${initials}</div>
+                            <div><strong>${escapeHtml(profile.name)}</strong><br>${escapeHtml(profile.headline || '')}</div>
+                        </div>
+                    </div>`;
+            });
+            container.innerHTML = html;
+        }
+        async function extractProfileByUrl(url) {
+            showAlert('searchStatus', `Extracting profile...`, 'info');
+            try {
+                const res = await fetch('/api/scraper/extract', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ profile_url: url }) });
+                const data = await res.json();
+                if (data.success) {
+                    state.currentProfiles.push(data.profile);
+                    state.stats.profiles++;
+                    updateUIState();
+                    displayExtractedProfiles(state.currentProfiles);
+                    switchTab('results');
+                    showToast('Profile extracted', 'success');
+                } else { showAlert('searchStatus', data.error || 'Extraction failed', 'error'); }
+            } catch (e) { showAlert('searchStatus', 'Error: ' + e.message, 'error'); }
+        }
+        async function searchAndExtract() {
+            const username = document.getElementById('usernameKeyword').value.trim();
+            let firstName = document.getElementById('firstName').value.trim();
+            let lastName = document.getElementById('lastName').value.trim();
+            const company = document.getElementById('company').value.trim();
+            const maxProfiles = parseInt(document.getElementById('maxResults').value);
+            if (username) { firstName = username; lastName = ''; }
+            if (!firstName && !lastName) { showAlert('searchStatus', 'Enter username or name', 'warning'); return; }
+            const btn = document.getElementById('btnSearchExtract'); btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Extracting...';
+            try {
+                const res = await fetch('/api/scraper/search-and-extract', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ first_name: firstName, last_name: lastName, company, max_profiles: maxProfiles }) });
+                const data = await res.json();
+                if (data.success) {
+                    state.currentProfiles = data.profiles;
+                    state.stats.profiles += data.profiles.length;
+                    updateUIState();
+                    displayExtractedProfiles(state.currentProfiles);
+                    switchTab('results');
+                    showToast(`Extracted ${data.profiles.length} profiles`, 'success');
+                } else { showAlert('searchStatus', data.error || 'No profiles found', 'error'); }
+            } catch (e) { showAlert('searchStatus', 'Error: ' + e.message, 'error'); }
+            finally { btn.disabled = false; btn.innerHTML = 'Search & Extract All'; }
+        }
+        function displayExtractedProfiles(profiles) {
+            const container = document.getElementById('resultsContainer');
+            if (!profiles.length) { container.innerHTML = '<p>No extracted profiles.</p>'; return; }
+            
+            let html = `
+                <table style="width: 100%; border-collapse: collapse; text-align: left; background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.05); color:#1f2937; margin-bottom: 20px;">
+                    <thead>
+                        <tr style="background: #f3f4f6; border-bottom: 2px solid #e5e7eb;">
+                            <th style="padding: 12px 16px; font-weight:600; font-size:14px; width:60px;">Profile</th>
+                            <th style="padding: 12px 16px; font-weight:600; font-size:14px;">Name</th>
+                            <th style="padding: 12px 16px; font-weight:600; font-size:14px;">Headline / Job Title</th>
+                            <th style="padding: 12px 16px; font-weight:600; font-size:14px;">Company</th>
+                            <th style="padding: 12px 16px; font-weight:600; font-size:14px;">Location</th>
+                            <th style="padding: 12px 16px; font-weight:600; font-size:14px;">Scraped At</th>
+                            <th style="padding: 12px 16px; font-weight:600; font-size:14px; text-align:center;">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+            
+            profiles.forEach((p, idx) => {
+                const jobTitle = p.current_job ? (p.current_job.title || 'N/A') : 'N/A';
+                const company = p.current_job ? (p.current_job.company || 'N/A') : 'N/A';
+                const scrapedAt = p.scraped_at ? new Date(p.scraped_at).toLocaleString() : 'N/A';
+                
+                const initials = (p.name || '?').split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
+                const avatarHtml = p.profile_picture 
+                    ? `<img src="${escapeHtml(p.profile_picture)}" style="width:40px;height:40px;border-radius:50%;object-fit:cover;border:2px solid #0a66c2;">`
+                    : `<div style="width:40px;height:40px;border-radius:50%;background: linear-gradient(135deg, #0a66c2, #004182);color:white;display:flex;align-items:center;justify-content:center;font-weight:bold;font-size:14px;">${initials}</div>`;
+                
+                html += `
+                    <tr style="border-bottom: 1px solid #f3f4f6;">
+                        <td style="padding: 12px 16px; text-align:center;">${avatarHtml}</td>
+                        <td style="padding: 12px 16px; font-weight:600; color:#111827;">${escapeHtml(p.name || 'Unknown')}</td>
+                        <td style="padding: 12px 16px; font-size:13px;">${escapeHtml(jobTitle)}</td>
+                        <td style="padding: 12px 16px; font-size:13px; color:#4b5563;">${escapeHtml(company)}</td>
+                        <td style="padding: 12px 16px; font-size:13px; color:#4b5563;">${escapeHtml(p.location || 'N/A')}</td>
+                        <td style="padding: 12px 16px; font-size:13px; color:#6b7280;">${scrapedAt}</td>
+                        <td style="padding: 12px 16px; text-align:center;">
+                            <div style="display:flex; gap:8px; justify-content:center; align-items:center;">
+                                <button class="btn btn-primary" style="padding:4px 8px; font-size:12px; border-radius:4px; margin:0;" onclick="showProfileDetail(${idx})">View Details</button>
+                                <button class="btn btn-outline" style="padding:4px 8px; font-size:12px; border-radius:4px; margin:0;" onclick="exportDataSingle(${idx}, 'json')">JSON</button>
+                                <button class="btn btn-outline" style="padding:4px 8px; font-size:12px; border-radius:4px; margin:0; border-color:#ef4444; color:#ef4444;" onclick="exportFullTextAsPDFSingle(${idx})">PDF</button>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+            });
+            html += '</tbody></table>';
+            container.innerHTML = html;
+        }
+        function showProfileDetail(index) {
+            state.activeProfileIndex = index;
+            const p = state.currentProfiles[index];
+            if (!p) return;
+            const detailDiv = document.getElementById('profileDetail');
+            let html = `<div style="text-align:center;">${p.profile_picture ? `<img src="${p.profile_picture}" class="profile-pic">` : `<div style="width:100px;height:100px;border-radius:50%;background:#0a66c2;color:white;display:flex;align-items:center;justify-content:center;font-size:32px;margin:0 auto 12px;">${(p.name?.[0] || '?')}</div>`}</div>`;
+            html += `<h2>${escapeHtml(p.name || 'Unknown')}</h2>`;
+            if (p.headline) html += `<p style="color:#555;font-size:15px;margin-top:4px;">${escapeHtml(p.headline)}</p>`;
+            if (p.location) html += `<p style="color:#888;font-size:14px;"><i class="fas fa-map-marker-alt"></i> ${escapeHtml(p.location)}</p>`;
+
+            // About
+            if (p.about) {
+                html += `<div class="section-title" style="display:flex; justify-content:space-between; align-items:center;">
+                            <span><i class="fas fa-user"></i> About</span>
+                            <button class="btn-json-toggle" onclick="toggleAdminSectionJson('about', this)" style="background:rgba(10,102,194,0.1); border:1px solid rgba(10,102,194,0.3); color:#0a66c2; font-size:12px; cursor:pointer; font-weight:600; padding:2px 8px; border-radius:4px;"><i class="fas fa-code"></i> JSON</button>
+                         </div>`;
+                html += `<div class="full-text-box" style="max-height:200px;">${escapeHtml(p.about)}</div>`;
+                html += `<pre class="section-json-box" id="aboutJson" style="display:none; background:#f3f4f6; border:1px solid #e5e7eb; padding:12px; border-radius:10px; font-family:monospace; font-size:12px; color:#1e1b4b; margin-top:10px; white-space:pre-wrap; overflow-x:auto;"></pre>`;
+            }
+
+            // Current Job
+            if (p.current_job && (p.current_job.title || p.current_job.company)) {
+                html += `<div class="section-title" style="display:flex; justify-content:space-between; align-items:center;">
+                            <span><i class="fas fa-briefcase"></i> Current Job</span>
+                            <button class="btn-json-toggle" onclick="toggleAdminSectionJson('current_job', this)" style="background:rgba(10,102,194,0.1); border:1px solid rgba(10,102,194,0.3); color:#0a66c2; font-size:12px; cursor:pointer; font-weight:600; padding:2px 8px; border-radius:4px;"><i class="fas fa-code"></i> JSON</button>
+                         </div>`;
+                html += `<div style="background:#f0f7ff;padding:14px;border-radius:10px;border-left:4px solid #0a66c2;">`;
+                if (p.current_job.title) html += `<div style="font-weight:700;font-size:16px;">${escapeHtml(p.current_job.title)}</div>`;
+                if (p.current_job.company) html += `<div style="color:#555;">${escapeHtml(p.current_job.company)}</div>`;
+                if (p.current_job.duration) html += `<div style="color:#888;font-size:13px;">${escapeHtml(p.current_job.duration)}</div>`;
+                if (p.current_job.location) html += `<div style="color:#888;font-size:13px;"><i class="fas fa-map-marker-alt"></i> ${escapeHtml(p.current_job.location)}</div>`;
+                html += `</div>`;
+                html += `<pre class="section-json-box" id="current_jobJson" style="display:none; background:#f3f4f6; border:1px solid #e5e7eb; padding:12px; border-radius:10px; font-family:monospace; font-size:12px; color:#1e1b4b; margin-top:10px; white-space:pre-wrap; overflow-x:auto;"></pre>`;
+            }
+
+            // Experience (all entries)
+            if (p.experience && p.experience.length) {
+                html += `<div class="section-title" style="display:flex; justify-content:space-between; align-items:center;">
+                            <span><i class="fas fa-briefcase"></i> Experience</span>
+                            <button class="btn-json-toggle" onclick="toggleAdminSectionJson('experience', this)" style="background:rgba(10,102,194,0.1); border:1px solid rgba(10,102,194,0.3); color:#0a66c2; font-size:12px; cursor:pointer; font-weight:600; padding:2px 8px; border-radius:4px;"><i class="fas fa-code"></i> JSON</button>
+                         </div>`;
+                p.experience.forEach(exp => {
+                    html += `<div style="background:#f0f7ff;padding:14px;border-radius:10px;margin-bottom:12px;border-left:4px solid #0a66c2;">`;
+                    if (exp.title) html += `<div style="font-weight:700;font-size:16px;">${escapeHtml(exp.title)}</div>`;
+                    if (exp.company) html += `<div style="color:#555;font-weight:600;margin-top:2px;">${escapeHtml(exp.company)}</div>`;
+                    if (exp.duration) html += `<div style="color:#888;font-size:13px;margin-top:2px;">${escapeHtml(exp.duration)}</div>`;
+                    if (exp.location) html += `<div style="color:#888;font-size:13px;margin-top:2px;"><i class="fas fa-map-marker-alt"></i> ${escapeHtml(exp.location)}</div>`;
+                    html += `</div>`;
+                });
+                html += `<pre class="section-json-box" id="experienceJson" style="display:none; background:#f3f4f6; border:1px solid #e5e7eb; padding:12px; border-radius:10px; font-family:monospace; font-size:12px; color:#1e1b4b; margin-top:10px; white-space:pre-wrap; overflow-x:auto;"></pre>`;
+            }
+
+            // Qualifications / Education
+            if (p.qualifications && p.qualifications.length) {
+                html += `<div class="section-title" style="display:flex; justify-content:space-between; align-items:center;">
+                            <span><i class="fas fa-graduation-cap"></i> Qualifications</span>
+                            <button class="btn-json-toggle" onclick="toggleAdminSectionJson('qualifications', this)" style="background:rgba(10,102,194,0.1); border:1px solid rgba(10,102,194,0.3); color:#0a66c2; font-size:12px; cursor:pointer; font-weight:600; padding:2px 8px; border-radius:4px;"><i class="fas fa-code"></i> JSON</button>
+                         </div>`;
+                p.qualifications.forEach(q => {
+                    html += `<div style="background:#f9fafb;padding:10px 14px;border-radius:8px;margin-bottom:8px;border:1px solid #e5e7eb;">`;
+                    if (q.institution) html += `<div style="font-weight:600;">${escapeHtml(q.institution)}</div>`;
+                    if (q.degree) html += `<div style="color:#555;">${escapeHtml(q.degree)}</div>`;
+                    if (q.dates) html += `<div style="color:#888;font-size:13px;">${escapeHtml(q.dates)}</div>`;
+                    html += `</div>`;
+                });
+                html += `<pre class="section-json-box" id="qualificationsJson" style="display:none; background:#f3f4f6; border:1px solid #e5e7eb; padding:12px; border-radius:10px; font-family:monospace; font-size:12px; color:#1e1b4b; margin-top:10px; white-space:pre-wrap; overflow-x:auto;"></pre>`;
+            }
+
+            // Certifications
+            if (p.certifications && p.certifications.length) {
+                html += `<div class="section-title" style="display:flex; justify-content:space-between; align-items:center;">
+                            <span><i class="fas fa-certificate"></i> Certifications</span>
+                            <button class="btn-json-toggle" onclick="toggleAdminSectionJson('certifications', this)" style="background:rgba(10,102,194,0.1); border:1px solid rgba(10,102,194,0.3); color:#0a66c2; font-size:12px; cursor:pointer; font-weight:600; padding:2px 8px; border-radius:4px;"><i class="fas fa-code"></i> JSON</button>
+                         </div>`;
+                p.certifications.forEach(c => {
+                    html += `<div style="background:#fffbeb;padding:10px 14px;border-radius:8px;margin-bottom:8px;border:1px solid #fde68a;">`;
+                    if (c.name) html += `<div style="font-weight:600;">${escapeHtml(c.name)}</div>`;
+                    if (c.issuer) html += `<div style="color:#555;">${escapeHtml(c.issuer)}</div>`;
+                    if (c.date) html += `<div style="color:#888;font-size:13px;">${escapeHtml(c.date)}</div>`;
+                    html += `</div>`;
+                });
+                html += `<pre class="section-json-box" id="certificationsJson" style="display:none; background:#f3f4f6; border:1px solid #e5e7eb; padding:12px; border-radius:10px; font-family:monospace; font-size:12px; color:#1e1b4b; margin-top:10px; white-space:pre-wrap; overflow-x:auto;"></pre>`;
+            }
+
+            // Full text
+            if (p.full_text) {
+                html += `<div class="section-title" style="display:flex; justify-content:space-between; align-items:center;">
+                            <span><i class="fas fa-file-alt"></i> Full Profile Raw Text</span>
+                            <button class="btn-json-toggle" onclick="toggleAdminSectionJson('full_text', this)" style="background:rgba(10,102,194,0.1); border:1px solid rgba(10,102,194,0.3); color:#0a66c2; font-size:12px; cursor:pointer; font-weight:600; padding:2px 8px; border-radius:4px;"><i class="fas fa-code"></i> JSON</button>
+                         </div>`;
+                html += `<div class="full-text-box" style="max-height:400px; overflow-y:auto; margin-bottom: 20px;">${escapeHtml(p.full_text)}</div>`;
+                html += `<pre class="section-json-box" id="full_textJson" style="display:none; background:#f3f4f6; border:1px solid #e5e7eb; padding:12px; border-radius:10px; font-family:monospace; font-size:12px; color:#1e1b4b; margin-top:10px; white-space:pre-wrap; overflow-x:auto;"></pre>`;
+            }
+
+            if (p.error) html += `<div class="alert alert-error">Error: ${escapeHtml(p.error)}</div>`;
+
+            // Add "Show all" button linking to LinkedIn
+            if (p.profile_url) {
+                html += `<div style="text-align:center; margin-top: 24px; margin-bottom: 24px;">
+                            <a href="${escapeHtml(p.profile_url)}" target="_blank" class="btn btn-primary" style="text-decoration:none; padding:12px 24px; font-size:16px;">
+                                <i class="fab fa-linkedin"></i> Show all on LinkedIn
+                            </a>
+                         </div>`;
+            }
+
+            detailDiv.innerHTML = html;
+            detailDiv.scrollIntoView({ behavior: 'smooth' });
+        }
+
+        function toggleAdminSectionJson(sectionKey, btn) {
+            const index = state.activeProfileIndex;
+            const p = state.currentProfiles[index];
+            if (!p) return;
+            const container = document.getElementById(sectionKey + 'Json');
+            if (!container) return;
+            
+            if (container.style.display === 'none' || !container.style.display) {
+                let dataToDisplay = p[sectionKey];
+                container.textContent = JSON.stringify(dataToDisplay, null, 2);
+                container.style.display = 'block';
+                btn.innerHTML = '<i class="fas fa-eye-slash"></i> Hide JSON';
+            } else {
+                container.style.display = 'none';
+                btn.innerHTML = '<i class="fas fa-code"></i> JSON';
+            }
+        }
+
+        // --- approvals functions ---
+        async function loadApprovals() {
+            const container = document.getElementById('approvalsTableContainer');
+            container.innerHTML = '<p><i class="fas fa-spinner fa-spin"></i> Loading client requests...</p>';
+            try {
+                const res = await fetch('/api/admin/approvals');
+                const data = await res.json();
+                if (data.success) {
+                    if (!data.approvals.length) {
+                        container.innerHTML = '<p>No client requests found.</p>';
+                        return;
+                    }
+                    let html = `
+                        <table style="width: 100%; border-collapse: collapse; text-align: left; background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.05); color:#1f2937;">
+                            <thead>
+                                <tr style="background: #f3f4f6; border-bottom: 2px solid #e5e7eb;">
+                                    <th style="padding: 14px 20px; font-weight:600;">Request ID</th>
+                                    <th style="padding: 14px 20px; font-weight:600;">Person Name</th>
+                                    <th style="padding: 14px 20px; font-weight:600;">Requested At</th>
+                                    <th style="padding: 14px 20px; font-weight:600;">Status</th>
+                                    
+                                    <th style="padding: 14px 20px; font-weight:600;">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                    `;
+                    data.approvals.forEach(req => {
+                        const isPending = req.status === 'pending';
+                        const statusColor = isPending ? '#d97706' : '#059669';
+                        const dateStr = new Date(req.requested_at).toLocaleString();
+                        html += `
+                            <tr style="border-bottom: 1px solid #f3f4f6;">
+                                <td style="padding: 14px 20px; font-family: monospace; font-size:13px; font-weight:600;">${escapeHtml(req.request_id)}</td>
+                                <td style="padding: 14px 20px; font-weight:600;">
+                                    ${isPending ? `
+                                        <a href="#" onclick="event.preventDefault(); scrapeRequestedName('${escapeHtml(req.request_id)}', '${escapeHtml(req.person_name)}')" style="color:#0a66c2; text-decoration:underline; font-weight:700;" title="Click to search and scrape this person using the active scraper session">${escapeHtml(req.person_name)}</a>
+                                    ` : `<span style="color:#111827;">${escapeHtml(req.person_name)}</span>`}
+                                </td>
+                                <td style="padding: 14px 20px; font-size:13px; color:#666;">${dateStr}</td>
+                                <td style="padding: 14px 20px;"><span style="color: ${statusColor}; font-weight:bold; font-size:13px; text-transform:uppercase;">${req.status}</span></td>
+                                <td style="padding: 14px 20px;">
+                                    ${isPending ? `
+                                        <button class="btn btn-success" style="padding:6px 12px; font-size:13px; border-radius:6px;" onclick="approveRequest('${escapeHtml(req.request_id)}')">Approve</button>
+                                    ` : `<span style="color:#6b7280; font-size:13px;"><i class="fas fa-check-circle"></i> Approved & Active</span>`}
+                                </td>
+                            </tr>
+                        `;
+                    });
+                    html += '</tbody></table>';
+                    container.innerHTML = html;
+                } else {
+                    container.innerHTML = `<p style="color:#ef4444;">Error loading requests: ${data.error}</p>`;
+                }
+            } catch (e) {
+                container.innerHTML = `<p style="color:#ef4444;">Connection error: ${e.message}</p>`;
+            }
+        }
+
+        async function approveRequest(requestId) {
+            try {
+                const res = await fetch('/api/admin/approve', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ request_id: requestId })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    showToast('Request approved!', 'success');
+                    loadApprovals();
+                } else {
+                    showToast('Failed to approve request: ' + data.error, 'error');
+                }
+            } catch (e) {
+                showToast('Connection error: ' + e.message, 'error');
+            }
+        }
+
+        async function scrapeRequestedName(requestId, personName) {
+            
+            showToast(`Searching & scraping profile for "${personName}" using active session...`, 'info');
+            
+            const container = document.getElementById('approvalsTableContainer');
+            const originalHTML = container.innerHTML;
+            container.innerHTML = `<div style="text-align:center; padding: 40px; color:#1f2937;">
+                <i class="fas fa-spinner fa-spin fa-2x" style="color:#0a66c2; margin-bottom:12px;"></i>
+                <p style="font-weight:600;">LinkedIn Scraper is searching and extracting profile for "${escapeHtml(personName)}"...</p>
+                <p style="font-size:13px; color:#6b7280; margin-top:4px;">Please wait. This will take a few seconds.</p>
+            </div>`;
+            
+            try {
+                const res = await fetch('/api/admin/scrape-requested-name', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ request_id: requestId, person_name: personName })
+                });
+                const data = await res.json();
+                
+                if (data.success) {
+                    showToast(`Successfully extracted profile for "${personName}"!`, 'success');
+                    
+                    state.currentProfiles.push(data.profile);
+                    state.stats.profiles++;
+                    
+                    await loadApprovals();
+                    
+                    displayExtractedProfiles(state.currentProfiles);
+                    showProfileDetail(state.currentProfiles.length - 1);
+                    switchTab('results');
+                } else {
+                    showToast('Failed to scrape: ' + data.error, 'error');
+                    container.innerHTML = originalHTML;
+                }
+            } catch (e) {
+                showToast('Connection error during extraction: ' + e.message, 'error');
+                container.innerHTML = originalHTML;
+            }
+        }
+
+        async function loadPendingScrapes() {
+            const container = document.getElementById('pendingScrapesTableContainer');
+            if (!container) return;
+            try {
+                const res = await fetch('/api/admin/approvals');
+                const data = await res.json();
+                if (data.success) {
+                    let pendings = data.approvals.filter(req => req.status === 'pending');
+                    pendings.sort((a, b) => new Date(a.requested_at) - new Date(b.requested_at));
+                    
+                    if (!pendings.length) {
+                        container.innerHTML = '<p style="color:#6b7280; font-style:italic;">No pending client scrape requests.</p>';
+                        return;
+                    }
+                    
+                    let html = `
+                        <table style="width: 100%; border-collapse: collapse; text-align: left; background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.05); color:#1f2937; margin-top:10px;">
+                            <thead>
+                                <tr style="background: #f3f4f6; border-bottom: 2px solid #e5e7eb;">
+                                    <th style="padding: 12px 16px; font-weight:600; font-size:14px;">Requested Name</th>
+                                    <th style="padding: 12px 16px; font-weight:600; font-size:14px;">Request ID</th>
+                                    <th style="padding: 12px 16px; font-weight:600; font-size:14px;">Requested At</th>
+                                    
+                                    <th style="padding: 12px 16px; font-weight:600; font-size:14px;">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                    `;
+                    pendings.forEach((req, index) => {
+                        const dateStr = new Date(req.requested_at).toLocaleString();
+                        const badge = index === 0 ? '<span style="background:#ef4444; color:white; font-size:11px; padding:2px 6px; border-radius:4px; margin-left:8px; font-weight:bold;">SEARCH FIRST</span>' : '';
+                        html += `
+                            <tr style="border-bottom: 1px solid #f3f4f6;">
+                                <td style="padding: 12px 16px; font-weight:600; color:#111827;">${escapeHtml(req.person_name)}${badge}</td>
+                                <td style="padding: 12px 16px; font-family: monospace; font-size:13px;">${escapeHtml(req.request_id)}</td>
+                                <td style="padding: 12px 16px; font-size:13px; color:#6b7280;">${dateStr}</td>
+                                <td style="padding: 12px 16px;">
+                                    <button class="btn btn-success" style="padding:6px 12px; font-size:13px; border-radius:6px; margin:0;" onclick="scrapeFromSearchTab('${escapeHtml(req.request_id)}', '${escapeHtml(req.person_name)}')">Search & Scrape</button>
+                                </td>
+                            </tr>
+                        `;
+                    });
+                    html += '</tbody></table>';
+                    container.innerHTML = html;
+                } else {
+                    container.innerHTML = `<p style="color:#ef4444;">Error loading requests: ${data.error}</p>`;
+                }
+            } catch (e) {
+                container.innerHTML = `<p style="color:#ef4444;">Connection error: ${e.message}</p>`;
+            }
+        }
+
+        async function scrapeFromSearchTab(requestId, personName) {
+            
+            showToast(`Searching & scraping profile for "${personName}" using active session...`, 'info');
+            
+            const container = document.getElementById('pendingScrapesTableContainer');
+            const originalHTML = container.innerHTML;
+            container.innerHTML = `<div style="text-align:center; padding: 40px; color:#1f2937;">
+                <i class="fas fa-spinner fa-spin fa-2x" style="color:#0a66c2; margin-bottom:12px;"></i>
+                <p style="font-weight:600;">LinkedIn Scraper is searching and extracting profile for "${escapeHtml(personName)}"...</p>
+                <p style="font-size:13px; color:#6b7280; margin-top:4px;">Please wait. This will take a few seconds.</p>
+            </div>`;
+            
+            try {
+                const res = await fetch('/api/admin/scrape-requested-name', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ request_id: requestId, person_name: personName })
+                });
+                const data = await res.json();
+                
+                if (data.success) {
+                    showToast(`Successfully extracted profile for "${personName}"!`, 'success');
+                    
+                    state.currentProfiles.push(data.profile);
+                    state.stats.profiles++;
+                    
+                    await loadPendingScrapes();
+                    
+                    displayExtractedProfiles(state.currentProfiles);
+                    showProfileDetail(state.currentProfiles.length - 1);
+                    switchTab('results');
+                } else {
+                    showToast('Failed to scrape: ' + data.error, 'error');
+                    container.innerHTML = originalHTML;
+                }
+            } catch (e) {
+                showToast('Connection error during extraction: ' + e.message, 'error');
+                container.innerHTML = originalHTML;
+            }
+        }
+
+        async function exportDataSingle(index, format) {
+            const p = state.currentProfiles[index];
+            if (!p) return;
+            try {
+                const res = await fetch('/api/scraper/export', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ data: { profiles: [p] }, format })
+                });
+                if (res.ok) {
+                    const blob = await res.blob();
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `${escapeHtml(p.name || 'profile')}_export.${format}`;
+                    a.click();
+                    URL.revokeObjectURL(url);
+                    showToast(`Exported ${p.name || 'profile'} as ${format}`, 'success');
+                } else {
+                    showToast('Export failed', 'error');
+                }
+            } catch (e) {
+                showToast('Export error: ' + e.message, 'error');
+            }
+        }
+
+        async function exportFullTextAsPDFSingle(index) {
+            const p = state.currentProfiles[index];
+            if (!p) return;
+            let content = `PROFILE: ${p.name || 'Unknown'}\nURL: ${p.profile_url || 'N/A'}\n\n--- ABOUT ---\n${p.about || 'N/A'}\n\n--- CURRENT JOB ---\nTitle: ${p.current_job?.title || 'N/A'}\nCompany: ${p.current_job?.company || 'N/A'}\nDuration: ${p.current_job?.duration || 'N/A'}\n\n--- QUALIFICATIONS ---\n${(p.qualifications || []).map(q => `${q.institution} - ${q.degree} (${q.dates})`).join('\n') || 'N/A'}\n\n--- CERTIFICATIONS ---\n${(p.certifications || []).map(c => `${c.name} - ${c.issuer} (${c.date})`).join('\n') || 'N/A'}\n\n`;
+            try {
+                const res = await fetch('/api/export-text-pdf', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text: content })
+                });
+                if (res.ok) {
+                    const blob = await res.blob();
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `${escapeHtml(p.name || 'profile')}.pdf`;
+                    a.click();
+                    URL.revokeObjectURL(url);
+                    showToast('PDF exported successfully', 'success');
+                } else {
+                    showToast('Export failed', 'error');
+                }
+            } catch (e) {
+                showToast('Export error: ' + e.message, 'error');
+            }
+        }
+
+        async function destroyMasterDatabase() {
+            if (!confirm("WARNING: This will permanently destroy all cached profiles, scraping requests, and master database data! Are you absolutely sure?")) return;
+            try {
+                const res = await fetch('/api/admin/destroy-db', { method: 'POST' });
+                const data = await res.json();
+                if (data.success) {
+                    alert("All database records destroyed successfully.");
+                    location.reload();
+                } else {
+                    alert("Error: " + data.error);
+                }
+            } catch (e) {
+                console.error(e);
+                alert("Failed to destroy database.");
+            }
+        }
+
+        async function loadMasterProfiles() {
+            try {
+                const res = await fetch('/api/admin/db-profiles');
+                const data = await res.json();
+                if (data.success && data.profiles && data.profiles.length > 0) {
+                    state.currentProfiles = data.profiles;
+                    displayExtractedProfiles(state.currentProfiles);
+                }
+            } catch (e) {
+                console.error("Error loading master database profiles:", e);
+            }
+        }
+
+        async function updateStats() {
+            try {
+                const res = await fetch('/api/scraper/stats');
+                const data = await res.json();
+                if (data.success && data.stats) {
+                    state.initialized = data.stats.is_browser_running;
+                    state.authenticated = data.stats.is_authenticated;
+                    updateUIState();
+                } else if (data.error === 'Not initialized') {
+                    state.initialized = false;
+                    state.authenticated = false;
+                    updateUIState();
+                }
+            } catch (e) { console.error(e); }
+        }
+
+        updateUIState();
+        loadPendingScrapes();
+        loadMasterProfiles();
+
+        // Auto-polling for Admin UI real-time updates
+        setInterval(() => {
+            updateStats();
+            if (state.activeTab === 'approvals') {
+                loadApprovals();
+            } else if (state.activeTab === 'search') {
+                loadPendingScrapes();
+            }
+        }, 5000);
+    </script>
+</body>
+
+</html>
