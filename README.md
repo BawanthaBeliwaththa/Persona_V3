@@ -1,6 +1,6 @@
 # LinkedIn Profile Scraper V4
 
-> **A full-stack LinkedIn profile intelligence platform** — scrapes every visible section of any LinkedIn profile, stores structured data, ranks Sri Lankan professionals by AI-computed scores, and provides both a human-friendly web dashboard and a programmatic REST API for integration.
+> **A full-stack LinkedIn profile intelligence platform** — scrapes every visible section of any LinkedIn profile, stores structured data, and provides both a human-friendly web dashboard and a programmatic REST API for integration.
 
 ---
 
@@ -11,18 +11,16 @@
 3. [Project Structure & File Descriptions](#3-project-structure--file-descriptions)
    - [app.py — The Flask Web Server](#31-apppy--the-flask-web-server)
    - [core.py — The LinkedIn Scraper Engine](#32-corepy--the-linkedin-scraper-engine)
-   - [ranker.py — The Profile Ranking Engine](#33-rankerpy--the-profile-ranking-engine)
-   - [llm_parser.py — The AI Parser](#34-llm_parserpy--the-ai-parser)
-   - [session_manager.py — The Session Manager](#35-session_managerpy--the-session-manager)
-   - [templates/index.html — The Admin Dashboard](#36-templatesindexhtml--the-admin-dashboard)
-   - [templates/client.html — The Client View](#37-templatesclienthtml--the-client-view)
+   - [llm_parser.py — The AI Parser](#33-llm-parserpy--the-ai-parser)
+   - [session_manager.py — The Session Manager](#34-session_managerpy--the-session-manager)
+   - [templates/index.html — The Admin Dashboard](#35-templatesindexhtml--the-admin-dashboard)
+   - [templates/client.html — The Client View](#36-templatesclienthtml--the-client-view)
 4. [Data Output Schema](#4-data-output-schema)
 5. [REST API Reference](#5-rest-api-reference)
-6. [Profile Scoring & Ranking System](#6-profile-scoring--ranking-system)
-7. [Installation & Setup](#7-installation--setup)
-8. [How to Use](#8-how-to-use)
-9. [Screenshots](#9-screenshots)
-10. [Known Limitations](#10-known-limitations)
+6. [Installation & Setup](#6-installation--setup)
+7. [How to Use](#7-how-to-use)
+8. [Screenshots](#8-screenshots)
+9. [Known Limitations](#9-known-limitations)
 
 ---
 
@@ -35,7 +33,6 @@ LinkedIn Profile Scraper V4 is an automated system that:
 - **Reads** the full visible text of the page and parses every LinkedIn section into structured JSON fields.
 - **Attempts** to extract private contact information (email, phone, website) from the LinkedIn "Contact info" modal.
 - **Saves** all scraped data to a persistent JSON database and CSV file under `exports/`.
-- **Ranks** Sri Lankan profiles on a 150-point weighted scoring model combining profile completeness and field-matched follower strength.
 - **Exposes** a full REST API for external systems to trigger scrapes and retrieve results.
 - **Displays** results in two web interfaces: an admin-facing Dashboard and a client-facing Profile Viewer.
 
@@ -64,12 +61,7 @@ Browser (Playwright Chromium)
          │       ├── POST /api/scraper/scrape  (single URL)
          │       ├── POST /api/scraper/bulk    (multiple URLs)
          │       ├── GET  /api/scraper/results (retrieve any job result)
-         │       ├── POST /api/scraper/export  (download JSON or CSV)
-         │       └── GET  /api/scraper/rank    (ranked Sri Lankan profiles)
-         │
-         ├──► ranker.py
-         │       └── rank_sri_lankan_profiles()
-         │           └── score_profile()
+         │       └── POST /api/scraper/export  (download JSON or CSV)
          │
          └──► templates/
                  ├── index.html   (Admin Dashboard)
@@ -86,7 +78,6 @@ The entire scraping pipeline is **asynchronous** using Python's `asyncio`. Flask
 V4/
 ├── app.py                  ← Flask web server + REST API
 ├── core.py                 ← LinkedIn scraper engine (Playwright)
-├── ranker.py               ← Profile scoring and ranking model
 ├── llm_parser.py           ← Optional AI-assisted profile parser
 ├── session_manager.py      ← Browser session cookie persistence
 ├── req.txt                 ← Python package requirements
@@ -96,7 +87,6 @@ V4/
 ├── screenshots/
 │   ├── dashboard.png
 │   ├── profile_view.png
-│   ├── rankings.png
 │   └── json_output.png
 └── README.md               ← This file
 ```
@@ -156,7 +146,6 @@ sessions/
 | `GET` | `/api/scraper/jobs` | `get_jobs()` | Lists all scrape jobs with their statuses. |
 | `GET` | `/api/scraper/profiles` | `get_all_profiles()` | Returns the full master profiles database. |
 | `POST` | `/api/scraper/export` | `export_data()` | Exports data as downloadable JSON or CSV file. |
-| `GET` | `/api/scraper/rank` | `rank_profiles()` | Returns all scraped Sri Lankan profiles ranked by score. |
 | `POST` | `/api/scraper/close` | `close_scraper()` | Closes the browser gracefully. |
 
 #### `save_to_persistent_db(profile)` Function
@@ -474,133 +463,8 @@ Combines `search_people()` + `extract_profile()`. Searches for up to `max_profil
 **What it does:**
 Gracefully closes the Playwright browser context and stops the Playwright engine. Always call this when shutting down the application to free resources.
 
----
 
-### 3.3 `ranker.py` — The Profile Ranking Engine
-
-**File purpose:** A standalone scoring and ranking module. It takes a list of scraped profile dictionaries and returns them sorted by a weighted score from 0–150. It also filters to only Sri Lankan profiles.
-
-#### `SL_KEYWORDS` List
-
-A list of 28 Sri Lankan location keywords used to determine if a profile belongs to a Sri Lankan professional:
-```python
-["sri lanka", "srilanka", "colombo", "kandy", "galle", "jaffna", ...]
-```
-The check is performed against the profile's `location`, `headline`, and `about` fields combined.
-
-#### `FIELD_CATEGORIES` Dictionary
-
-Maps 11 professional field names to lists of relevant keywords:
-
-| Field | Example Keywords |
-|---|---|
-| Software & IT | software, developer, python, aws, docker, kubernetes |
-| Data & Analytics | data science, analytics, tableau, sql, bi |
-| Finance & Banking | finance, banking, cfo, audit, risk, compliance |
-| Marketing & Sales | marketing, seo, brand, sales, crm |
-| Healthcare & Medicine | doctor, nurse, medical, hospital, pharma |
-| Education & Research | lecturer, professor, phd, research, academic |
-| Engineering & Manufacturing | civil, mechanical, electrical, logistics |
-| Design & Creative | designer, ux, ui, graphic, animation |
-| Legal & Compliance | lawyer, attorney, legal, counsel |
-| Management & Leadership | ceo, cto, director, founder, executive |
-| HR & People | human resource, talent, recruiter |
-
-#### `WEIGHTS` Dictionary
-
-Defines the maximum points each scoring component contributes:
-
-| Component | Max Points | What It Measures |
-|---|---|---|
-| `has_headline` | 8 | Whether the profile has a headline |
-| `headline_length` | 4 | Length of headline (longer = more informative) |
-| `has_about` | 8 | Whether the profile has an About section |
-| `about_length` | 6 | Length of About text |
-| `experience_count` | 15 | 3 pts per experience entry, max 5 entries |
-| `experience_quality` | 8 | Quality: descriptions > 80 chars, duration present |
-| `education_count` | 8 | 4 pts per education entry, max 2 entries |
-| `skills_count` | 10 | 1 pt per skill, max 10 skills |
-| `certifications` | 8 | 2 pts per cert, max 4 certs |
-| `featured` | 5 | Has a Featured section |
-| `connections_known` | 6 | Connections count (500+ = full points) |
-| `profile_photo` | 4 | Has a profile photo |
-| `recommendations` | 5 | 2.5 pts per recommendation, max 2 |
-| `volunteer` | 3 | Has volunteer experience |
-| `languages` | 2 | 1 pt per language, max 2 |
-| `field_match_followers` | 50 | Field keyword density × connection count |
-
-**Total maximum: 150 points** (100 profile strength + 50 field follower score)
-
-#### `is_sri_lankan(profile)` Function
-
-Checks if any of the 28 `SL_KEYWORDS` appear in a combined string of the profile's `location + headline + about`. Returns `True` or `False`.
-
-#### `detect_field_category(profile)` Function
-
-Scores a profile against all 11 field categories by counting keyword matches in `headline + about + skills + experience`. Returns the category with the highest keyword hit count. Returns `"General"` if no keywords match.
-
-#### `_parse_connections(conn_str)` Function
-
-Converts LinkedIn's connection display strings into a raw integer:
-- `"500+"` → `500`
-- `"1.2K followers"` → `1200`
-- `"2M followers"` → `2000000`
-
-#### `_experience_quality_score(experiences)` Function
-
-Scores experience entries by richness:
-- `+2 pts` if `description` field has more than 80 characters
-- `+1 pt` if `description` field exists but is shorter
-- `+0.5 pts` if `duration` field is present
-
-Returns a value capped at `WEIGHTS["experience_quality"]` = 8.
-
-#### `score_profile(profile)` Function
-
-The main scoring function. Takes one profile dictionary and returns:
-```json
-{
-  "total_score": 127.5,
-  "profile_strength": 85.5,
-  "field_follower_score": 42.0,
-  "field_category": "Software & IT",
-  "is_sri_lankan": true,
-  "connections_count": 1200,
-  "breakdown": {
-    "has_headline": 8,
-    "headline_length": 3.2,
-    "has_about": 8,
-    "experience_count": 15,
-    ...
-  }
-}
-```
-
-#### `rank_sri_lankan_profiles(profiles)` Function
-
-The public API function:
-1. Iterates over all profiles.
-2. Calls `score_profile()` for each.
-3. Discards profiles where `is_sri_lankan == False`.
-4. Sorts remaining profiles by `total_score` descending.
-5. Assigns `rank` integers starting from 1.
-6. Returns a list of `{ rank, profile, scoring }` dicts.
-
-#### `get_score_tier(score)` Function
-
-Maps a numeric score to a display tier:
-
-| Score Range | Tier | Color | Icon |
-|---|---|---|---|
-| ≥ 120 | Elite | `#7c3aed` (purple) | 👑 |
-| ≥ 100 | Expert | `#059669` (green) | ⭐ |
-| ≥ 80 | Strong | `#0a66c2` (blue) | 👍 |
-| ≥ 60 | Moderate | `#d97706` (amber) | 📈 |
-| < 60 | Beginner | `#6b7280` (grey) | 🌱 |
-
----
-
-### 3.4 `llm_parser.py` — The AI Parser
+### 3.3 `llm_parser.py` — The AI Parser
 
 **File purpose:** An optional AI-powered parsing layer. When enabled with an OpenAI API key, it can parse raw HTML using GPT-3.5-turbo as an alternative or fallback to the text-based parsers in `core.py`. By default it is **disabled** (`use_ai=False`).
 
@@ -625,7 +489,7 @@ parser = LLMParser(use_ai=True, api_key="sk-...")
 
 ---
 
-### 3.5 `session_manager.py` — The Session Manager
+### 3.4 `session_manager.py` — The Session Manager
 
 **File purpose:** Handles saving and loading LinkedIn browser session cookies to/from disk as `.pkl` files. This allows you to export a logged-in session from one machine and import it on another.
 
@@ -660,7 +524,7 @@ Creates the `sessions/` directory if it does not exist.
 
 ---
 
-### 3.6 `templates/index.html` — The Admin Dashboard
+### 3.5 `templates/index.html` — The Admin Dashboard
 
 **File purpose:** A single-page web application served at `/`. This is the **admin-facing interface** for operating the scraper. Built with vanilla HTML, CSS, and JavaScript (no external framework). Uses AJAX (Fetch API) to communicate with the Flask backend.
 
@@ -671,7 +535,6 @@ Creates the `sessions/` directory if it does not exist.
 | **Dashboard** | Overview stats (total profiles, today's scrapes, success rate), recent scrapes table, quick scrape input |
 | **Scraper** | Initialize scraper, login form, single URL scrape form, bulk URL scrape (textarea for multiple URLs), job status monitor |
 | **Profiles** | Browse all profiles in the master database, search/filter by name or headline, view full profile details in a modal |
-| **Rankings** | View the ranked Sri Lankan profile leaderboard with scores, tiers, field categories, and breakdown charts |
 | **Export** | Download the entire database as JSON or CSV |
 | **Settings** | Scraper configuration (headless mode, session name) |
 
@@ -683,21 +546,20 @@ Creates the `sessions/` directory if it does not exist.
 | `scrapeProfile(url)` | Calls `POST /api/scraper/scrape` with a URL, stores the `return_code`, starts polling |
 | `pollJobStatus(code)` | Calls `GET /api/scraper/results/{code}` every 3 seconds until status is `completed` or `failed` |
 | `loadProfiles()` | Calls `GET /api/scraper/profiles` and renders the profiles grid |
-| `loadRankings()` | Calls `GET /api/scraper/rank` and renders the ranked leaderboard |
 | `exportData(format)` | Calls `POST /api/scraper/export` with format=`json` or `csv` and triggers file download |
 
 ---
 
-### 3.7 `templates/client.html` — The Client View
+### 3.6 `templates/client.html` — The Client View
 
 **File purpose:** A clean, read-only profile viewer served at `/client`. This is the **client-facing interface** — it presents scraped profiles in a polished card layout without any scraper controls. Clients can browse profiles, view full details, filter by name/field, and export individual profiles.
 
 #### Features
 
-- **Profile cards** showing photo, name, headline, location, connections count, and score tier.
+- **Profile cards** showing photo, name, headline, location, and connections count.
 - **Detail modal** when you click a profile — shows every section (About, Experience, Education, Skills, Languages, Certifications, Projects, Volunteer, Publications, Recommendations, Interests).
 - **Search and filter** by name, headline, or field category.
-- **Sort controls** — sort by name, score, or scrape date.
+- **Sort controls** — sort by name or scrape date.
 - **Export individual profile** as JSON directly from the detail modal.
 
 ---
@@ -867,81 +729,13 @@ Body: { "data": {...}, "format": "json" }   ← format can be "json" or "csv"
 Response: File download
 ```
 
-### Get Ranked Sri Lankan Profiles
-```
-GET /api/scraper/rank
-Response: {
-  "success": true,
-  "total": 23,
-  "ranked_profiles": [
-    {
-      "rank": 1,
-      "profile": { ...profile data... },
-      "scoring": {
-        "total_score": 127.5,
-        "profile_strength": 85.5,
-        "field_follower_score": 42.0,
-        "field_category": "Management & Leadership",
-        "tier": { "label": "Elite", "color": "#7c3aed" },
-        "breakdown": { ... }
-      }
-    }
-  ]
-}
-```
 
 ---
 
-## 6. Profile Scoring & Ranking System
-
-The ranker uses a **two-component weighted model**:
-
-### Component 1: Profile Strength (0–100 points)
-
-Measures how complete and rich the profile is:
-
-```
-Profile Strength = has_headline (8) + headline_length (4)
-                 + has_about (8) + about_length (6)
-                 + experience_count (15) + experience_quality (8)
-                 + education_count (8)
-                 + skills_count (10)
-                 + certifications (8)
-                 + featured (5)
-                 + connections_known (6)
-                 + profile_photo (4)
-                 + recommendations (5)
-                 + volunteer (3)
-                 + languages (2)
-```
-
-### Component 2: Field-Match Follower Score (0–50 points)
-
-Measures professional authority within the person's field:
-
-```
-Field Score = 50 × (0.6 × connection_ratio + 0.4 × field_keyword_density)
-
-where:
-  connection_ratio = min(connections / 1000, 1.0)
-  field_keyword_density = matching_field_keywords / total_field_keywords
-```
-
-### Total Score = Profile Strength + Field Score (max 150)
-
-### Score Tiers
-
-| Range | Tier |
-|---|---|
-| 120–150 | 👑 Elite |
-| 100–119 | ⭐ Expert |
-| 80–99 | 👍 Strong |
-| 60–79 | 📈 Moderate |
-| 0–59 | 🌱 Beginner |
 
 ---
 
-## 7. Installation & Setup
+## 6. Installation & Setup
 
 ### Prerequisites
 
@@ -991,7 +785,7 @@ The server starts on `http://localhost:5000`.
 
 ---
 
-## 8. How to Use
+## 7. How to Use
 
 ### Scraping a Single Profile
 
@@ -1015,11 +809,6 @@ The server starts on `http://localhost:5000`.
 - Click any profile card to open the full detail modal.
 - For the client-friendly view, go to `http://localhost:5000/client`.
 
-### Viewing Rankings
-
-- Go to the **Rankings** tab.
-- Only Sri Lankan profiles are shown, ranked by total score.
-- Filter by field category using the dropdown.
 
 ### Exporting Data
 
@@ -1028,7 +817,7 @@ The server starts on `http://localhost:5000`.
 
 ---
 
-## 9. Screenshots
+## 8. Screenshots
 
 ### Dashboard — Main Control Panel
 ![Dashboard](screenshots/dashboard.png)
@@ -1044,10 +833,6 @@ Every scraped LinkedIn section is displayed in a structured card layout: About, 
 
 ---
 
-### Rankings — Sri Lankan Professional Leaderboard
-![Rankings](screenshots/rankings.png)
-
-The ranking system scores all Sri Lankan profiles on a 150-point scale. Each profile shows its tier (Elite/Expert/Strong/Moderate/Beginner), field category, profile strength score, and field-follower score. Filter by professional category using the dropdown.
 
 ---
 
@@ -1058,7 +843,7 @@ The scraper outputs a fully structured JSON object for every profile with 25 fie
 
 ---
 
-## 10. Known Limitations
+## 9. Known Limitations
 
 | Limitation | Description |
 |---|---|
