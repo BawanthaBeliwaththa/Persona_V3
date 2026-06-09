@@ -303,9 +303,9 @@ Used to parse the "About" section.
 Parses the **first** experience entry (the current job). Finds the `Experience` header line, then captures lines until the next section marker. Returns a dictionary:
 ```json
 {
-  "title": "Group Chairman",
-  "company": "Sri Lanka Telecom",
-  "duration": "Nov 2024 - Present · 1 yr 8 mos",
+  "title": "Web Developer",
+  "company": "Freelance",
+  "duration": "Jan 2022 - Present · 4 yrs 6 mos",
   "location": "Sri Lanka"
 }
 ```
@@ -321,9 +321,9 @@ Same as `_parse_experience` but groups all lines under the Experience section in
 Finds the `Education` header, captures lines until the next section marker, and groups them into blocks of 3 lines each:
 ```json
 {
-  "institution": "University of Moratuwa",
-  "degree": "Bachelor of Science in Engineering",
-  "dates": "2005 – 2009"
+  "institution": "University of Kelaniya",
+  "degree": "BSc in Data Science",
+  "dates": "2021 – 2025"
 }
 ```
 
@@ -381,10 +381,10 @@ Finds `Languages`, captures lines, and for each pair checks if the second line c
 Finds `Projects`, groups into blocks of 4 (title, dates, associated_with, description):
 ```json
 {
-  "title": "AI-Powered Crop Disease Detection",
-  "dates": "Jan 2024 – Present",
-  "associated_with": "University of Moratuwa",
-  "description": "Developed a CNN model to detect..."
+  "title": "LinkedIn Profile Scraper V4",
+  "dates": "2026 – Present",
+  "associated_with": "Freelance",
+  "description": "Developed a full-stack profile scraper using Playwright and Flask."
 }
 ```
 
