@@ -334,25 +334,19 @@ def export_data():
             profiles = export_payload.get('profiles', [])
             if not profiles:
                 return jsonify({'success': False, 'error': 'No profiles in data'}), 400
-            writer.writerow(['Name', 'Headline', 'Location', 'About', 'Email', 'Phone', 'Website', 'Experiences', 'Education', 'Certifications', 'Skills', 'Honors', 'Languages', 'Projects', 'Profile URL', 'Scraped At'])
+            writer.writerow(['Name', 'Profile Picture', 'About', 'Job Title', 'Company', 'Qualifications', 'Certifications', 'Profile URL', 'Scraped At'])
             for p in profiles:
-                edu = '; '.join([f"{q.get('institution','')} - {q.get('degree','')}" for q in (p.get('education') or [])])
+                job = p.get('current_job', {}) or {}
+                quals = '; '.join([f"{q.get('institution','')} - {q.get('degree','')}" for q in (p.get('qualifications') or [])])
                 certs = '; '.join([f"{c.get('name','')} - {c.get('issuer','')}" for c in (p.get('certifications') or [])])
                 writer.writerow([
                     p.get('name', ''),
-                    p.get('headline', ''),
-                    p.get('location', ''),
+                    p.get('profile_picture', ''),
                     (p.get('about', '') or '')[:2000],
-                    p.get('email', ''),
-                    p.get('phone', ''),
-                    p.get('website', ''),
-                    json.dumps(p.get('experiences', [])),
-                    edu,
+                    job.get('title', ''),
+                    job.get('company', ''),
+                    quals,
                     certs,
-                    json.dumps(p.get('skills', [])),
-                    json.dumps(p.get('honors', [])),
-                    json.dumps(p.get('languages', [])),
-                    json.dumps(p.get('projects', [])),
                     p.get('profile_url', ''),
                     p.get('scraped_at', '')
                 ])
@@ -444,11 +438,8 @@ def save_to_persistent_db(profile):
                 
             # 2. Rewrite master CSV database
             headers = [
-                'name', 'headline', 'location', 'profile_picture', 'connections', 'about',
-                'email', 'phone', 'website',
-                'current_job', 'experiences', 'education', 'certifications',
-                'skills', 'honors', 'languages', 'projects',
-                'volunteer', 'publications', 'courses', 'recommendations', 'interests',
+                'name', 'headline', 'location', 'profile_picture', 'about', 
+                'current_job', 'experience', 'qualifications', 'certifications', 
                 'profile_url', 'scraped_at'
             ]
             
@@ -461,24 +452,11 @@ def save_to_persistent_db(profile):
                         p.get('headline', ''),
                         p.get('location', ''),
                         p.get('profile_picture', ''),
-                        p.get('connections', ''),
                         p.get('about', ''),
-                        p.get('email', ''),
-                        p.get('phone', ''),
-                        p.get('website', ''),
                         json.dumps(p.get('current_job', {})),
-                        json.dumps(p.get('experiences', [])),
-                        json.dumps(p.get('education', [])),
+                        json.dumps(p.get('experience', [])),
+                        json.dumps(p.get('qualifications', [])),
                         json.dumps(p.get('certifications', [])),
-                        json.dumps(p.get('skills', [])),
-                        json.dumps(p.get('honors', [])),
-                        json.dumps(p.get('languages', [])),
-                        json.dumps(p.get('projects', [])),
-                        json.dumps(p.get('volunteer', [])),
-                        json.dumps(p.get('publications', [])),
-                        json.dumps(p.get('courses', [])),
-                        json.dumps(p.get('recommendations', [])),
-                        json.dumps(p.get('interests', [])),
                         p.get('profile_url', ''),
                         p.get('scraped_at', '')
                     ])
@@ -548,11 +526,8 @@ def save_scraped_data_formats(profile, return_code):
     # Save CSV file (headers matching JSON keys)
     csv_path = API_SCRAPES_DIR / f"{return_code}.csv"
     headers = [
-        'name', 'headline', 'location', 'profile_picture', 'connections', 'about',
-        'email', 'phone', 'website',
-        'current_job', 'experiences', 'education', 'certifications',
-        'skills', 'honors', 'languages', 'projects',
-        'volunteer', 'publications', 'courses', 'recommendations', 'interests',
+        'name', 'headline', 'location', 'profile_picture', 'about', 
+        'current_job', 'experience', 'qualifications', 'certifications', 
         'profile_url', 'scraped_at', 'return_code'
     ]
     
@@ -561,24 +536,11 @@ def save_scraped_data_formats(profile, return_code):
         profile.get('headline', ''),
         profile.get('location', ''),
         profile.get('profile_picture', ''),
-        profile.get('connections', ''),
         profile.get('about', ''),
-        profile.get('email', ''),
-        profile.get('phone', ''),
-        profile.get('website', ''),
         json.dumps(profile.get('current_job', {})),
-        json.dumps(profile.get('experiences', [])),
-        json.dumps(profile.get('education', [])),
+        json.dumps(profile.get('experience', [])),
+        json.dumps(profile.get('qualifications', [])),
         json.dumps(profile.get('certifications', [])),
-        json.dumps(profile.get('skills', [])),
-        json.dumps(profile.get('honors', [])),
-        json.dumps(profile.get('languages', [])),
-        json.dumps(profile.get('projects', [])),
-        json.dumps(profile.get('volunteer', [])),
-        json.dumps(profile.get('publications', [])),
-        json.dumps(profile.get('courses', [])),
-        json.dumps(profile.get('recommendations', [])),
-        json.dumps(profile.get('interests', [])),
         profile.get('profile_url', ''),
         profile.get('scraped_at', ''),
         return_code
@@ -826,44 +788,246 @@ def client_download_pdf():
         with open(json_path, 'r', encoding='utf-8') as f:
             p = json.load(f)
             
+        import re
+        import urllib.request
+        import tempfile
         from fpdf import FPDF
         
-        text = f"PROFILE: {p.get('name', 'Unknown')}\n"
-        text += f"URL: {p.get('profile_url', 'N/A')}\n"
-        text += f"Headline: {p.get('headline', 'N/A')}\n"
-        text += f"Location: {p.get('location', 'N/A')}\n\n"
-        text += f"--- ABOUT ---\n{p.get('about', 'N/A')}\n\n"
-        
-        job_info = p.get('current_job', {}) or {}
-        text += f"--- CURRENT JOB ---\n"
-        text += f"Title: {job_info.get('title', 'N/A')}\n"
-        text += f"Company: {job_info.get('company', 'N/A')}\n"
-        text += f"Duration: {job_info.get('duration', 'N/A')}\n"
-        text += f"Location: {job_info.get('location', 'N/A')}\n\n"
-        
-        text += f"--- EXPERIENCE ---\n"
-        for exp in p.get('experience', []):
-            text += f"- {exp.get('title', 'N/A')} at {exp.get('company', 'N/A')} ({exp.get('duration', 'N/A')})\n"
-        text += "\n"
-        
-        text += f"--- QUALIFICATIONS ---\n"
-        for q in p.get('qualifications', []):
-            text += f"- {q.get('institution', 'N/A')} - {q.get('degree', 'N/A')} ({q.get('dates', 'N/A')})\n"
-        text += "\n"
-        
-        text += f"--- CERTIFICATIONS ---\n"
-        for c in p.get('certifications', []):
-            text += f"- {c.get('name', 'N/A')} - {c.get('issuer', 'N/A')} ({c.get('date', 'N/A')})\n"
-            
+        def strip_emojis(text):
+            if not text:
+                return ""
+            emoji_pattern = re.compile(
+                "["
+                "\U00010000-\U0010ffff"
+                "\u2600-\u27BF"
+                "\u2000-\u32FF"
+                "]+", flags=re.UNICODE
+            )
+            return emoji_pattern.sub(r"", text)
+
+        def make_pdf_safe(text):
+            if not text:
+                return "N/A"
+            clean = strip_emojis(text)
+            return clean.encode('latin-1', 'replace').decode('latin-1')
+
+        def download_profile_pic(url):
+            try:
+                temp_dir = tempfile.gettempdir()
+                temp_path = os.path.join(temp_dir, f"profile_{os.urandom(4).hex()}.jpg")
+                
+                req = urllib.request.Request(
+                    url, 
+                    headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36'}
+                )
+                with urllib.request.urlopen(req, timeout=10) as response:
+                    with open(temp_path, 'wb') as f:
+                        f.write(response.read())
+                return temp_path
+            except Exception as e:
+                print(f"Failed to download image from {url}: {e}")
+                return None
+
+        class PDF(FPDF):
+            def header(self):
+                # Banner background
+                self.set_fill_color(10, 102, 194) # LinkedIn Blue
+                self.rect(0, 0, 210, 35, 'F')
+                
+                # Title text
+                self.set_text_color(255, 255, 255)
+                self.set_font("Arial", 'B', 18)
+                self.cell(0, 15, "LINKEDIN PROFILE REPORT", ln=True, align='L')
+                self.ln(10)
+                
+            def footer(self):
+                self.set_y(-15)
+                self.set_font("Arial", 'I', 8)
+                self.set_text_color(128, 128, 128)
+                self.cell(0, 10, f'Page {self.page_no()}', 0, 0, 'C')
+
         pdf_path = API_SCRAPES_DIR / f"{return_code}.pdf"
-        pdf = FPDF()
+        pdf = PDF()
         pdf.add_page()
+        pdf.set_margins(15, 40, 15)
+        pdf.set_auto_page_break(True, margin=15)
+        
+        image_path = None
+        if p.get('profile_picture'):
+            image_path = download_profile_pic(p['profile_picture'])
+            
+        pdf.set_y(40)
+        
+        if image_path:
+            try:
+                pdf.image(image_path, x=155, y=40, w=40, h=40)
+            except Exception as e:
+                print(f"Error embedding image: {e}")
+                
+        pdf.set_text_color(0, 0, 0)
+        pdf.set_font("Arial", 'B', 16)
+        name_line = make_pdf_safe(p.get('name', 'Unknown Name'))
+        pdf.cell(130, 8, name_line, ln=True)
+        
         pdf.set_font("Arial", size=10)
-        for line in text.split('\n'):
-            safe_line = line.encode('latin-1', 'replace').decode('latin-1')
-            pdf.cell(0, 5, safe_line, ln=True)
+        pdf.set_text_color(80, 80, 80)
+        headline_line = make_pdf_safe(p.get('headline', 'N/A'))
+        pdf.multi_cell(130, 5, headline_line)
+        pdf.ln(2)
+        
+        location_line = make_pdf_safe(f"Location: {p.get('location', 'N/A')}")
+        pdf.cell(130, 5, location_line, ln=True)
+        
+        url_line = make_pdf_safe(f"URL: {p.get('profile_url', 'N/A')}")
+        pdf.cell(130, 5, url_line, ln=True)
+        
+        if p.get('connections'):
+            conn_line = make_pdf_safe(f"Connections: {p.get('connections')}")
+            pdf.cell(130, 5, conn_line, ln=True)
+            
+        pdf.set_y(85)
+        
+        # --- ABOUT ---
+        if p.get('about'):
+            pdf.set_font("Arial", 'B', 12)
+            pdf.set_text_color(10, 102, 194)
+            pdf.cell(0, 6, "ABOUT", ln=True)
+            pdf.set_fill_color(10, 102, 194)
+            pdf.rect(15, pdf.get_y(), 180, 0.5, 'F')
+            pdf.ln(3)
+            
+            pdf.set_font("Arial", size=10)
+            pdf.set_text_color(30, 30, 30)
+            about_text = make_pdf_safe(p.get('about', ''))
+            pdf.multi_cell(0, 5, about_text)
+            pdf.ln(5)
+            
+        # --- EXPERIENCE ---
+        exp_list = p.get('experiences', []) or p.get('experience', [])
+        if exp_list:
+            pdf.set_font("Arial", 'B', 12)
+            pdf.set_text_color(10, 102, 194)
+            pdf.cell(0, 6, "EXPERIENCE", ln=True)
+            pdf.set_fill_color(10, 102, 194)
+            pdf.rect(15, pdf.get_y(), 180, 0.5, 'F')
+            pdf.ln(3)
+            
+            for exp in exp_list:
+                pdf.set_font("Arial", 'B', 10)
+                pdf.set_text_color(0, 0, 0)
+                title = make_pdf_safe(exp.get('title', 'N/A'))
+                company = make_pdf_safe(exp.get('company', 'N/A'))
+                duration = make_pdf_safe(exp.get('duration', ''))
+                loc = make_pdf_safe(exp.get('location', ''))
+                
+                pdf.multi_cell(0, 5, f"{title} at {company}")
+                pdf.set_font("Arial", 'I', 9)
+                pdf.set_text_color(100, 100, 100)
+                pdf.cell(0, 5, f"{duration} | {loc}" if loc else duration, ln=True)
+                pdf.ln(3)
+            pdf.ln(2)
+
+        # --- EDUCATION ---
+        edu_list = p.get('education', []) or p.get('qualifications', [])
+        if edu_list:
+            pdf.set_font("Arial", 'B', 12)
+            pdf.set_text_color(10, 102, 194)
+            pdf.cell(0, 6, "EDUCATION / QUALIFICATIONS", ln=True)
+            pdf.set_fill_color(10, 102, 194)
+            pdf.rect(15, pdf.get_y(), 180, 0.5, 'F')
+            pdf.ln(3)
+            
+            for edu in edu_list:
+                pdf.set_font("Arial", 'B', 10)
+                pdf.set_text_color(0, 0, 0)
+                inst = make_pdf_safe(edu.get('institution', 'N/A'))
+                deg = make_pdf_safe(edu.get('degree', 'N/A'))
+                dates = make_pdf_safe(edu.get('dates', ''))
+                
+                pdf.multi_cell(0, 5, f"{inst} - {deg}")
+                pdf.set_font("Arial", 'I', 9)
+                pdf.set_text_color(100, 100, 100)
+                pdf.cell(0, 5, dates, ln=True)
+                pdf.ln(3)
+            pdf.ln(2)
+
+        # --- SKILLS ---
+        skills_list = p.get('skills', [])
+        if skills_list:
+            pdf.set_font("Arial", 'B', 12)
+            pdf.set_text_color(10, 102, 194)
+            pdf.cell(0, 6, "SKILLS", ln=True)
+            pdf.set_fill_color(10, 102, 194)
+            pdf.rect(15, pdf.get_y(), 180, 0.5, 'F')
+            pdf.ln(3)
+            
+            pdf.set_font("Arial", size=10)
+            pdf.set_text_color(30, 30, 30)
+            skills_formatted = []
+            for s in skills_list:
+                if isinstance(s, dict):
+                    skill_name = s.get('skill', '')
+                    ends = s.get('endorsements', '')
+                    skills_formatted.append(f"{skill_name} ({ends})" if ends else skill_name)
+                else:
+                    skills_formatted.append(str(s))
+            
+            pdf.multi_cell(0, 5, make_pdf_safe(", ".join(skills_formatted)))
+            pdf.ln(5)
+
+        # --- CERTIFICATIONS ---
+        cert_list = p.get('certifications', [])
+        if cert_list:
+            pdf.set_font("Arial", 'B', 12)
+            pdf.set_text_color(10, 102, 194)
+            pdf.cell(0, 6, "CERTIFICATIONS", ln=True)
+            pdf.set_fill_color(10, 102, 194)
+            pdf.rect(15, pdf.get_y(), 180, 0.5, 'F')
+            pdf.ln(3)
+            
+            for cert in cert_list:
+                pdf.set_font("Arial", 'B', 10)
+                pdf.set_text_color(0, 0, 0)
+                cname = make_pdf_safe(cert.get('name', 'N/A'))
+                issuer = make_pdf_safe(cert.get('issuer', 'N/A'))
+                date = make_pdf_safe(cert.get('date', ''))
+                
+                pdf.cell(0, 5, f"{cname} - {issuer} ({date})", ln=True)
+                pdf.ln(2)
+            pdf.ln(2)
+            
+        # --- RECOMMENDATIONS ---
+        rec_list = p.get('recommendations', [])
+        if rec_list:
+            pdf.set_font("Arial", 'B', 12)
+            pdf.set_text_color(10, 102, 194)
+            pdf.cell(0, 6, "RECOMMENDATIONS", ln=True)
+            pdf.set_fill_color(10, 102, 194)
+            pdf.rect(15, pdf.get_y(), 180, 0.5, 'F')
+            pdf.ln(3)
+            
+            for rec in rec_list:
+                pdf.set_font("Arial", 'B', 10)
+                pdf.set_text_color(0, 0, 0)
+                recommender = make_pdf_safe(rec.get('recommender', 'N/A'))
+                title = make_pdf_safe(rec.get('title', 'N/A'))
+                text_val = make_pdf_safe(rec.get('text', 'N/A'))
+                
+                pdf.cell(0, 5, f"Recommender: {recommender} ({title})", ln=True)
+                pdf.set_font("Arial", 'I', 9)
+                pdf.set_text_color(50, 50, 50)
+                pdf.multi_cell(0, 4, text_val)
+                pdf.ln(3)
+            pdf.ln(2)
+
         pdf.output(str(pdf_path))
         
+        if image_path and os.path.exists(image_path):
+            try:
+                os.remove(image_path)
+            except:
+                pass
+                
         return send_file(pdf_path, as_attachment=True, download_name=f"{return_code}.pdf", mimetype='application/pdf')
     except Exception as e:
         import traceback; traceback.print_exc()
@@ -1125,10 +1289,8 @@ async def perform_background_bulk_scrape(profile_urls, return_code):
             # Save CSV file containing all scraped profiles
             csv_path = API_SCRAPES_DIR / f"{return_code}.csv"
             headers = [
-                'name', 'headline', 'location', 'profile_picture', 'about',
-                'email', 'phone', 'website',
-                'current_job', 'experiences', 'education', 'certifications',
-                'skills', 'honors', 'languages', 'projects',
+                'name', 'headline', 'location', 'profile_picture', 'about', 
+                'current_job', 'experience', 'qualifications', 'certifications', 
                 'profile_url', 'scraped_at', 'return_code'
             ]
             
@@ -1143,17 +1305,10 @@ async def perform_background_bulk_scrape(profile_urls, return_code):
                         profile.get('location', ''),
                         profile.get('profile_picture', ''),
                         profile.get('about', ''),
-                        profile.get('email', ''),
-                        profile.get('phone', ''),
-                        profile.get('website', ''),
                         json.dumps(profile.get('current_job', {})),
-                        json.dumps(profile.get('experiences', [])),
-                        json.dumps(profile.get('education', [])),
+                        json.dumps(profile.get('experience', [])),
+                        json.dumps(profile.get('qualifications', [])),
                         json.dumps(profile.get('certifications', [])),
-                        json.dumps(profile.get('skills', [])),
-                        json.dumps(profile.get('honors', [])),
-                        json.dumps(profile.get('languages', [])),
-                        json.dumps(profile.get('projects', [])),
                         profile.get('profile_url', ''),
                         profile.get('scraped_at', ''),
                         return_code
@@ -1172,17 +1327,10 @@ async def perform_background_bulk_scrape(profile_urls, return_code):
                         profile.get('location', ''),
                         profile.get('profile_picture', ''),
                         profile.get('about', ''),
-                        profile.get('email', ''),
-                        profile.get('phone', ''),
-                        profile.get('website', ''),
                         json.dumps(profile.get('current_job', {})),
-                        json.dumps(profile.get('experiences', [])),
-                        json.dumps(profile.get('education', [])),
+                        json.dumps(profile.get('experience', [])),
+                        json.dumps(profile.get('qualifications', [])),
                         json.dumps(profile.get('certifications', [])),
-                        json.dumps(profile.get('skills', [])),
-                        json.dumps(profile.get('honors', [])),
-                        json.dumps(profile.get('languages', [])),
-                        json.dumps(profile.get('projects', [])),
                         profile.get('profile_url', ''),
                         profile.get('scraped_at', ''),
                         return_code
