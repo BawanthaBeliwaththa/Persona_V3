@@ -87,57 +87,57 @@
 ├─────────────────────────────────────────────────────────────────────┤
 │                                                                     │
 │  ┌──────────────┐    ┌──────────────────────────────────────┐       │
-│  │ Client Portal│    │         Admin Dashboard               │       │
-│  │ (client.html)│    │         (index.html)                  │       │
-│  │              │    │                                       │       │
-│  │  • Search    │    │  • Scraper Controls  • Job Monitor    │       │
-│  │  • View      │    │  • Task Bucket       • DB Management  │       │
-│  │  • Ref Lookup│    │  • SSE Live Updates  • Export Center   │       │
-│  └──────┬───────┘    └──────────┬────────────────────────────┘       │
-│         │                       │                                    │
-│         └───────────┬───────────┘                                    │
-│                     │  HTTP / SSE                                    │
-│         ┌───────────▼───────────┐                                    │
-│         │    app.py (Flask)     │                                    │
-│         │                       │                                    │
-│         │  • REST API (40+ endpoints)                                │
-│         │  • Background async loop                                   │
-│         │  • Task Bucket worker                                      │
-│         │  • SSE broadcaster                                         │
-│         │  • File persistence                                        │
-│         └──────┬────────┬───────┘                                    │
-│                │        │                                            │
-│     ┌──────────▼──┐  ┌──▼──────────────┐                             │
-│     │  core.py    │  │   ranker.py     │                             │
-│     │  Scraper    │  │   Profile       │                             │
-│     │  Engine     │  │   Ranking       │                             │
-│     │             │  │                  │                             │
-│     │  Playwright │  │  Weighted ML     │                             │
-│     │  Chromium   │  │  Scoring Model   │                             │
-│     └──────┬──────┘  └──────────────────┘                            │
+│  │ Client Portal│    │         Admin Dashboard              │       │
+│  │ (client.html)│    │         (index.html)                 │       │
+│  │              │    │                                      │       │
+│  │  • Search    │    │  • Scraper Controls  • Job Monitor   │       │
+│  │  • View      │    │  • Task Bucket       • DB Management │       │
+│  │  • Ref Lookup│    │  • SSE Live Updates  • Export Cente  │       │
+│  └──────┬───────┘    └──────────┬────────────────────────────┘      │
+│         │                       │                                   │
+│         └───────────┬───────────┘                                   │
+│                     │  HTTP / SSE                                   │
+│         ┌───────────▼───────────┐                                   │
+│         │    app.py (Flask)     │                                   │
+│         │                       │                                   │
+│         │  • REST API (40+ endpoints)                               │
+│         │  • Background async loop                                  │
+│         │  • Task Bucket worker                                     │
+│         │  • SSE broadcaster                                        │
+│         │  • File persistence                                       │
+│         └──────┬────────┬───────┘                                   │
+│                │        │                                           │
+│     ┌──────────▼──┐  ┌──▼──────────────┐                            │
+│     │  core.py    │  │   ranker.py     │                            │
+│     │  Scraper    │  │   Profile       │                            │
+│     │  Engine     │  │   Ranking       │                            │
+│     │             │  │                 │                            │
+│     │  Playwright │  │  Weighted ML    │                            │
+│     │  Chromium   │  │  Scoring Model  │                            │
+│     └──────┬──────┘  └─────────────────┘                            │
 │            │                                                         │
 │     ┌──────▼──────┐                                                  │
 │     │  LinkedIn   │                                                  │
 │     │  (Browser)  │                                                  │
 │     └─────────────┘                                                  │
 │                                                                      │
-│  ┌────────────────────────────────────────────────────┐               │
-│  │                   Data Layer                       │               │
-│  │                                                    │               │
-│  │  exports/                                          │               │
-│  │  ├── all_scraped_profiles.json  (Master JSON DB)   │               │
-│  │  ├── all_scraped_profiles.csv   (Master CSV)       │               │
-│  │  ├── name_cache.json            (Search cache)     │               │
-│  │  └── api_scrapes/                                  │               │
-│  │      ├── jobs.json              (Job registry)     │               │
-│  │      ├── {id}.json / .csv       (Per-job files)    │               │
-│  │      └── scraped_profiles.csv   (Master CSV)       │               │
-│  │  exports/task_bucket/                              │               │
-│  │  ├── queue.json                 (Task queue)       │               │
-│  │  └── config.json                (Worker config)    │               │
-│  │  browser_data/{session}/        (Chromium data)    │               │
-│  └────────────────────────────────────────────────────┘               │
-└─────────────────────────────────────────────────────────────────────┘
+│  ┌────────────────────────────────────────────────────┐              │
+│  │                   Data Layer                       │              │
+│  │                                                    │              │
+│  │  exports/                                          │              │
+│  │  ├── all_scraped_profiles.json  (Master JSON DB)   │              │
+│  │  ├── all_scraped_profiles.csv   (Master CSV)       │              │
+│  │  ├── name_cache.json            (Search cache)     │              │
+│  │  └── api_scrapes/                                  │              │
+│  │      ├── jobs.json              (Job registry)     │              │
+│  │      ├── {id}.json / .csv       (Per-job files)    │              │
+│  │      └── scraped_profiles.csv   (Master CSV)       │              │
+│  │  exports/task_bucket/                              │              │
+│  │  ├── queue.json                 (Task queue)       │              │
+│  │  └── config.json                (Worker config)    │              │
+│  │  browser_data/{session}/        (Chromium data)    │              │
+│  └────────────────────────────────────────────────────┘              │
+└──────────────────────────────────────────────────────────────────────┘
 ```
 
 ### Key Design Decisions
