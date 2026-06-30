@@ -1,614 +1,686 @@
-# LinkedIn Profile Scraper V3
-
-> **A full-stack LinkedIn profile intelligence platform** — scrapes every visible section of any LinkedIn profile, stores structured data, and provides both a human-friendly web dashboard and a programmatic REST API for integration.
-
----
-
-## Table of Contents
-
-1. [Project Overview](#1-project-overview)
-2. [System Architecture](#2-system-architecture)
-3. [Project Structure & File Descriptions](#3-project-structure--file-descriptions)
-   - [app.py — The Flask Web Server](#31-apppy--the-flask-web-server)
-   - [core.py — The LinkedIn Scraper Engine](#32-corepy--the-linkedin-scraper-engine)
-   - [llm_parser.py — The AI Parser](#33-llm-parserpy--the-ai-parser)
-   - [session_manager.py — The Session Manager](#34-session_managerpy--the-session-manager)
-   - [templates/index.html — The Admin Dashboard](#35-templatesindexhtml--the-admin-dashboard)
-   - [templates/client.html — The Client View](#36-templatesclienthtml--the-client-view)
-4. [Data Output Schema](#4-data-output-schema)
-5. [REST API Reference](#5-rest-api-reference)
-6. [Installation & Setup](#6-installation--setup)
-7. [How to Use](#7-how-to-use)
-8. [Screenshots](#8-screenshots)
-9. [Known Limitations](#9-known-limitations)
+<p align="center">
+  <h1 align="center">🔍 Persona</h1>
+  <p align="center">
+    <strong>LinkedIn Profile Intelligence Platform</strong>
+  </p>
+  <p align="center">
+    Scrape · Search · Rank · Export — Full-stack LinkedIn profile intelligence with real-time admin controls, automated task queuing, and a client-facing portal.
+  </p>
+  <p align="center">
+    <a href="#-quick-start"><img src="https://img.shields.io/badge/Quick%20Start-blue?style=for-the-badge" alt="Quick Start"></a>
+    <a href="#-rest-api-reference"><img src="https://img.shields.io/badge/API%20Docs-green?style=for-the-badge" alt="API Docs"></a>
+    <a href="#-architecture"><img src="https://img.shields.io/badge/Architecture-purple?style=for-the-badge" alt="Architecture"></a>
+  </p>
+</p>
 
 ---
 
-## 1. Project Overview
+## 📋 Table of Contents
 
-LinkedIn Profile Scraper V3 is an automated system that:
-
-- **Navigates** to any LinkedIn profile URL using a real Chromium browser controlled by Playwright.
-- **Scrolls and expands** all hidden sections (Experience, Education, Skills, Projects, etc.) by automatically clicking every "Show all" and "See more" button.
-- **Reads** the full visible text of the page and parses every LinkedIn section into structured JSON fields.
-- **Attempts** to extract private contact information (email, phone, website) from the LinkedIn "Contact info" modal.
-- **Saves** all scraped data to a persistent JSON database and CSV file under `exports/`.
-- **Exposes** a full REST API for external systems to trigger scrapes and retrieve results.
-- **Displays** results in two web interfaces: an admin-facing Dashboard and a client-facing Profile Viewer.
+- [Overview](#-overview)
+- [Features](#-features)
+- [Architecture](#-architecture)
+- [Project Structure](#-project-structure)
+- [Quick Start](#-quick-start)
+- [Usage Guide](#-usage-guide)
+  - [Admin Dashboard](#admin-dashboard)
+  - [Client Portal](#client-portal)
+  - [Task Bucket System](#task-bucket-system)
+- [REST API Reference](#-rest-api-reference)
+  - [Scraper Control](#scraper-control)
+  - [Client API](#client-api)
+  - [Admin API](#admin-api)
+  - [Task Bucket API](#task-bucket-api)
+  - [Export API](#export-api)
+  - [Profile Ranking API](#profile-ranking-api)
+- [Data Schema](#-data-schema)
+- [Module Reference](#-module-reference)
+  - [app.py — Flask Server & Orchestrator](#apppy--flask-server--orchestrator)
+  - [core.py — LinkedIn Scraper Engine](#corepy--linkedin-scraper-engine)
+  - [ranker.py — Profile Scoring & Ranking](#rankerpy--profile-scoring--ranking)
+  - [llm_parser.py — AI Parser (Optional)](#llm_parserpy--ai-parser-optional)
+  - [session_manager.py — Browser Session Persistence](#session_managerpy--browser-session-persistence)
+- [Configuration](#-configuration)
+- [Known Limitations](#-known-limitations)
+- [License](#-license)
 
 ---
 
-## 2. System Architecture
+## 🌐 Overview
+
+**Persona** is a full-stack LinkedIn profile intelligence platform that automates the entire pipeline from profile discovery to structured data export. It uses a real Chromium browser (via Playwright) to navigate LinkedIn, extract every visible profile section, and store structured JSON data — all controlled through a web-based admin dashboard and exposed via a comprehensive REST API.
+
+### What It Does
+
+1. **Navigates** to any LinkedIn profile URL using a real Chromium browser controlled by Playwright
+2. **Visits dedicated detail pages** (Experience, Education, Skills, etc.) for richer, more accurate data extraction
+3. **Parses** every LinkedIn section into structured JSON — experience, education, skills, certifications, languages, volunteer work, honors, recommendations, and more
+4. **Searches** for people by name and company, then auto-extracts all found profiles
+5. **Ranks** profiles using a weighted scoring model (profile strength + field-aligned relevance)
+6. **Queues** scrape tasks in a persistent Task Bucket with automatic background processing
+7. **Exports** data as JSON, CSV, or professionally formatted PDF reports
+8. **Streams** live updates to admin browsers via Server-Sent Events (SSE)
+9. **Serves** a client-facing portal for end-users to search and view profiles
+
+---
+
+## ✨ Features
+
+| Category | Features |
+|----------|----------|
+| **Scraping** | Single profile extraction · Bulk scraping · Name-based search & extract · Automatic retry on failure · Rate-limiting with configurable delays |
+| **Data Extraction** | 15+ LinkedIn sections parsed · Detail sub-page navigation · Contact info extraction · UI noise filtering · Anti-detection measures |
+| **Task Management** | Persistent task queue (Task Bucket) · Background worker with rest periods · Pause/resume controls · Auto-start on server launch |
+| **Admin Dashboard** | Real-time scraper status · Job monitoring · SSE live updates · Database management · Bulk task operations |
+| **Client Portal** | Search by name · View profile cards · Reference number lookup · Cached results for instant retrieval |
+| **Ranking** | Weighted scoring model (0–150 pts) · Profile completeness analysis · Field category detection · Sri Lankan geo-filter · Tiered labels (Beginner → Elite) |
+| **Export** | JSON · CSV · PDF (single & bulk) · Full-text PDF · Per-job files · Master database downloads |
+| **Persistence** | JSON database with deduplication · CSV mirror · Name-based result cache · Persistent browser sessions |
+
+---
+
+## 🏗 Architecture
 
 ```
-Browser (Playwright Chromium)
-         │
-         ▼
-   core.py  ◄──────────────────────────┐
-   LinkedInScraper                     │
-         │  extract_profile()           │
-         │  _extract_contact_info()     │
-         │  _parse_skills()             │
-         │  _parse_experience() ...     │
-         │                              │
-         ▼                              │
-   Structured Profile JSON             │
-         │                             │
-         ├──► app.py (Flask Server) ───┘
-         │       │
-         │       ├── save_to_persistent_db()  → exports/all_scraped_profiles.json
-         │       ├── save_scraped_data_formats() → exports/api_scrapes/{code}.json/.csv
-         │       ├── POST /api/scraper/scrape  (single URL)
-         │       ├── POST /api/scraper/bulk    (multiple URLs)
-         │       ├── GET  /api/scraper/results (retrieve any job result)
-         │       └── POST /api/scraper/export  (download JSON or CSV)
-         │
-         └──► templates/
-                 ├── index.html   (Admin Dashboard)
-                 └── client.html  (Client Profile Viewer)
+┌─────────────────────────────────────────────────────────────────────┐
+│                         PERSONA PLATFORM                            │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                     │
+│  ┌──────────────┐    ┌──────────────────────────────────────┐       │
+│  │ Client Portal│    │         Admin Dashboard               │       │
+│  │ (client.html)│    │         (index.html)                  │       │
+│  │              │    │                                       │       │
+│  │  • Search    │    │  • Scraper Controls  • Job Monitor    │       │
+│  │  • View      │    │  • Task Bucket       • DB Management  │       │
+│  │  • Ref Lookup│    │  • SSE Live Updates  • Export Center   │       │
+│  └──────┬───────┘    └──────────┬────────────────────────────┘       │
+│         │                       │                                    │
+│         └───────────┬───────────┘                                    │
+│                     │  HTTP / SSE                                    │
+│         ┌───────────▼───────────┐                                    │
+│         │    app.py (Flask)     │                                    │
+│         │                       │                                    │
+│         │  • REST API (40+ endpoints)                                │
+│         │  • Background async loop                                   │
+│         │  • Task Bucket worker                                      │
+│         │  • SSE broadcaster                                         │
+│         │  • File persistence                                        │
+│         └──────┬────────┬───────┘                                    │
+│                │        │                                            │
+│     ┌──────────▼──┐  ┌──▼──────────────┐                             │
+│     │  core.py    │  │   ranker.py     │                             │
+│     │  Scraper    │  │   Profile       │                             │
+│     │  Engine     │  │   Ranking       │                             │
+│     │             │  │                  │                             │
+│     │  Playwright │  │  Weighted ML     │                             │
+│     │  Chromium   │  │  Scoring Model   │                             │
+│     └──────┬──────┘  └──────────────────┘                            │
+│            │                                                         │
+│     ┌──────▼──────┐                                                  │
+│     │  LinkedIn   │                                                  │
+│     │  (Browser)  │                                                  │
+│     └─────────────┘                                                  │
+│                                                                      │
+│  ┌────────────────────────────────────────────────────┐               │
+│  │                   Data Layer                       │               │
+│  │                                                    │               │
+│  │  exports/                                          │               │
+│  │  ├── all_scraped_profiles.json  (Master JSON DB)   │               │
+│  │  ├── all_scraped_profiles.csv   (Master CSV)       │               │
+│  │  ├── name_cache.json            (Search cache)     │               │
+│  │  └── api_scrapes/                                  │               │
+│  │      ├── jobs.json              (Job registry)     │               │
+│  │      ├── {id}.json / .csv       (Per-job files)    │               │
+│  │      └── scraped_profiles.csv   (Master CSV)       │               │
+│  │  exports/task_bucket/                              │               │
+│  │  ├── queue.json                 (Task queue)       │               │
+│  │  └── config.json                (Worker config)    │               │
+│  │  browser_data/{session}/        (Chromium data)    │               │
+│  └────────────────────────────────────────────────────┘               │
+└─────────────────────────────────────────────────────────────────────┘
 ```
 
-The entire scraping pipeline is **asynchronous** using Python's `asyncio`. Flask routes that trigger scrapes use background threads (`threading.Thread`) so that the HTTP response is returned immediately with a `return_code` identifier that the client can use to poll for results.
+### Key Design Decisions
+
+- **Persistent Browser Context**: Playwright's `launch_persistent_context` stores cookies and session data across restarts — log in once, scrape forever
+- **Async Background Loop**: A dedicated `asyncio` event loop runs in a daemon thread, allowing non-blocking scrape operations while Flask handles HTTP requests synchronously
+- **Task Bucket Pattern**: A persistent JSON-backed queue with a single background worker that processes tasks sequentially with configurable rest periods between scrapes
+- **SSE for Live Updates**: Server-Sent Events push real-time status changes to all connected admin browsers without polling
 
 ---
 
-## 3. Project Structure & File Descriptions
+## 📁 Project Structure
 
 ```
-V4/
-├── app.py                  ← Flask web server + REST API
-├── core.py                 ← LinkedIn scraper engine (Playwright)
-├── llm_parser.py           ← Optional AI-assisted profile parser
-├── session_manager.py      ← Browser session cookie persistence
-├── req.txt                 ← Python package requirements
+persona/
+├── app.py                  # Flask web server, REST API, task orchestration (2500+ lines)
+├── core.py                 # LinkedIn scraper engine — Playwright browser automation (1055 lines)
+├── ranker.py               # Profile scoring & ranking model (363 lines)
+├── llm_parser.py           # Optional AI-powered profile parser via OpenAI (57 lines)
+├── session_manager.py      # Browser cookie session persistence (52 lines)
+├── update_app.py           # Migration/update utility script
+├── req.txt                 # Python dependencies
 ├── templates/
-│   ├── index.html          ← Admin-facing web dashboard
-│   └── client.html         ← Client-facing profile viewer
-├── screenshots/
-│   ├── dashboard.png
-│   ├── profile_view.png
-│   └── json_output.png
-└── README.md               ← This file
+│   ├── index.html          # Admin dashboard (single-page app)
+│   └── client.html         # Client-facing profile portal
+└── README.md               # This file
 ```
 
-When you run the system for the first time, the following directories are created automatically at runtime:
+### Auto-Generated at Runtime
 
 ```
 exports/
-├── all_scraped_profiles.json   ← Master JSON database (all profiles ever scraped)
-├── all_scraped_profiles.csv    ← Master CSV database (same data, flat)
+├── all_scraped_profiles.json    # Master JSON database (all profiles ever scraped)
+├── all_scraped_profiles.csv     # Master CSV mirror
+├── name_cache.json              # Name → profile URL cache for instant lookups
 └── api_scrapes/
-    ├── {return_code}.json      ← Per-job JSON result
-    └── {return_code}.csv       ← Per-job CSV result
+    ├── jobs.json                # Job status registry
+    ├── approvals.json           # Legacy approvals (backward compat)
+    ├── scraped_profiles.csv     # Appended master CSV for API scrapes
+    ├── {return_code}.json       # Per-job JSON result
+    ├── {return_code}.csv        # Per-job CSV result
+    └── {return_code}.pdf        # Per-job PDF report (generated on demand)
+
+exports/task_bucket/
+├── queue.json                   # Persistent task queue
+└── config.json                  # Worker configuration (rest_seconds)
+
 browser_data/
-└── default/                    ← Chromium persistent profile (stores LinkedIn login)
-sessions/
-└── *.pkl                       ← Saved browser cookie sessions
+└── {session_name}/              # Chromium persistent profile (cookies, localStorage)
 ```
 
 ---
 
-### 3.1 `app.py` — The Flask Web Server
+## 🚀 Quick Start
 
-**File purpose:** This is the central application entry point. It starts the Flask web server, manages all HTTP routes, controls the single shared `LinkedInScraper` instance, and handles all file persistence. Every browser interaction goes through `core.py`; `app.py` is the orchestrator that wires everything together.
+### Prerequisites
 
-#### Global State
+- **Python 3.9+**
+- **pip**
+- A valid **LinkedIn account**
 
-| Variable | Type | Description |
-|---|---|---|
-| `scraper` | `LinkedInScraper \| None` | The single shared scraper instance. Reused across requests to keep the browser open and logged in. |
-| `api_scrape_lock` | `threading.Lock` | Prevents race conditions when multiple API requests try to write to the JSON/CSV database at the same time. |
-| `db_lock` | `threading.Lock` | A secondary lock specifically guarding writes to the master persistent database files. |
+### 1. Clone the Repository
 
-#### Key Constants (File Paths)
+```bash
+git clone https://github.com/your-username/persona.git
+cd persona
+```
 
-| Constant | Path | Description |
-|---|---|---|
-| `EXPORTS_DIR` | `./exports/` | Root exports directory |
-| `ALL_PROFILES_JSON` | `./exports/all_scraped_profiles.json` | Master JSON of every profile ever scraped |
-| `ALL_PROFILES_CSV` | `./exports/all_scraped_profiles.csv` | Master CSV of same data |
-| `API_SCRAPES_DIR` | `./exports/api_scrapes/` | Per-job individual JSON/CSV files |
-| `MASTER_CSV_FILE` | `./exports/api_scrapes/master.csv` | Appended master CSV for API scrapes |
-| `JOBS_FILE` | `./exports/jobs.json` | Tracks status of every scrape job |
+### 2. Install Dependencies
 
-#### Routes
+```bash
+pip install -r req.txt
+```
 
-| Method | URL | Handler | Description |
-|---|---|---|---|
-| `GET` | `/` | `index()` | Serves `templates/index.html` (admin dashboard) |
-| `GET` | `/client` | `client_view()` | Serves `templates/client.html` (client viewer) |
-| `POST` | `/api/scraper/init` | `init_scraper()` | Starts the browser and initializes the scraper. Must be called before scraping. |
-| `GET` | `/api/scraper/status` | `get_status()` | Returns current scraper status: `{initialized, authenticated, stats}` |
-| `POST` | `/api/scraper/login` | `login()` | Logs into LinkedIn with email/password. |
-| `POST` | `/api/scraper/scrape` | `scrape_profile()` | Triggers a **single profile scrape** in the background. Returns a `return_code`. |
-| `POST` | `/api/scraper/bulk` | `bulk_scrape()` | Triggers a **bulk scrape** of multiple URLs. Returns a `return_code`. |
-| `GET` | `/api/scraper/results/<code>` | `get_results()` | Returns the scrape result for a given `return_code`. |
-| `GET` | `/api/scraper/jobs` | `get_jobs()` | Lists all scrape jobs with their statuses. |
-| `GET` | `/api/scraper/profiles` | `get_all_profiles()` | Returns the full master profiles database. |
-| `POST` | `/api/scraper/export` | `export_data()` | Exports data as downloadable JSON or CSV file. |
-| `POST` | `/api/scraper/close` | `close_scraper()` | Closes the browser gracefully. |
+### 3. Install Playwright Browsers
 
-#### `save_to_persistent_db(profile)` Function
+```bash
+playwright install chromium
+```
 
-**Purpose:** Saves a scraped profile to the master `all_scraped_profiles.json` and rewrites the master `all_scraped_profiles.csv`. If the profile already exists (matched by `profile_url`), it is updated in place. If it is new, it is appended.
+### 4. (Optional) Configure AI Parser
 
-**How it works step by step:**
-1. Acquires `db_lock` to prevent concurrent file writes.
-2. Reads the existing `all_scraped_profiles.json` into a Python list.
-3. Iterates through the list searching for a profile whose `profile_url` matches the new one.
-4. If found: replaces that entry with the new profile data and sets `updated = True`.
-5. If not found: appends the new profile to the list.
-6. Writes the entire updated list back to `all_scraped_profiles.json` with `indent=2`.
-7. Rewrites the entire `all_scraped_profiles.csv` from scratch using the current list (to keep JSON and CSV in sync).
+Create a `.env` file if you want to use the optional AI-powered parser:
 
-#### `save_scraped_data_formats(profile, return_code)` Function
+```env
+OPENAI_API_KEY=sk-...
+```
 
-**Purpose:** Saves a per-job result file. Every scrape triggered via the API gets its own `{return_code}.json` and `{return_code}.csv` inside `exports/api_scrapes/`. The result is also appended to the shared `master.csv`.
+### 5. Start the Server
 
-#### `perform_background_scrape(profile_url, return_code)` Async Function
+```bash
+python app.py
+```
 
-**Purpose:** The actual async function that runs in a background thread for single-profile API scrapes. It calls `scraper.extract_profile()`, updates the job status in `jobs.json`, saves the data via `save_scraped_data_formats()` and `save_to_persistent_db()`, then marks the job as `completed` or `failed`.
+```
+Persona - LinkedIn Profile Scraper and Ranker
+http://localhost:5000
+```
 
-#### `perform_background_bulk_scrape(profile_urls, return_code)` Async Function
+### 6. Log In to LinkedIn
 
-**Purpose:** Same as above but iterates over a list of URLs with a 4-second delay between each scrape (to avoid LinkedIn rate-limiting). Results from all URLs are aggregated into a single `{return_code}.json` containing a `profiles` array.
+1. Open `http://localhost:5000/admin` in your browser
+2. Click **Initialize Scraper** (set `headless: false` to see the browser window)
+3. Enter your LinkedIn credentials and click **Login**
+4. Once authenticated, the session is saved to `browser_data/default/` and persists across restarts
 
 ---
 
-### 3.2 `core.py` — The LinkedIn Scraper Engine
+## 📖 Usage Guide
 
-**File purpose:** This is the heart of the system. It contains the `LinkedInScraper` class which uses **Playwright** (a browser automation library) to open a real Chromium browser, navigate to LinkedIn, scroll and expand every section, and extract all profile data. It is entirely `async` (built on Python's `asyncio`).
+### Admin Dashboard
 
-#### `LinkedInScraper` Class
+Access at **`http://localhost:5000/admin`**
 
-```python
-scraper = LinkedInScraper(
-    headless=True,          # Run browser without visible window
-    browser_type='chromium',# Browser engine (only chromium supported)
-    session_name='default'  # Subfolder inside browser_data/ for persistent profile
-)
-```
+The admin dashboard is a full-featured single-page application for controlling every aspect of the scraper:
 
-The scraper uses a **persistent browser context** (Playwright's `launch_persistent_context`). This means the browser stores cookies, localStorage, and session data across restarts. Once you log in to LinkedIn via the UI, subsequent runs reuse the saved session without needing to log in again.
+| Section | Capabilities |
+|---------|-------------|
+| **Scraper Controls** | Initialize/close browser · Login to LinkedIn · Monitor authentication status |
+| **Single Scrape** | Paste a LinkedIn URL → get structured data in seconds |
+| **Bulk Scrape** | Paste multiple URLs → sequential extraction with rate limiting |
+| **Task Bucket** | Add tasks by name or URL · Monitor queue · Pause/resume worker · Configure rest periods |
+| **Job Monitor** | Real-time job status via SSE · Retry failed jobs · View results |
+| **Database** | Browse all profiles · Search/filter · Download full DB as JSON/CSV |
+| **Export** | Download individual or bulk PDFs · Export filtered data |
 
-#### `initialize()` Method
+### Client Portal
 
-**What it does:**
-1. Starts the Playwright engine.
-2. Launches a Chromium browser with the persistent data directory `browser_data/{session_name}/`.
-3. Sets a realistic `user_agent` string (Chrome 134 on Windows) so LinkedIn does not flag it as a bot.
-4. Injects JavaScript to hide the `navigator.webdriver` property (anti-detection).
-5. Navigates to `https://www.linkedin.com/feed/` to check if already logged in.
-6. If the URL contains `/feed/`, sets `is_authenticated = True`.
+Access at **`http://localhost:5000`** (root URL)
 
-#### `login(email, password)` Method
+The client portal is a clean, read-only interface designed for end-users:
 
-**What it does:**
-1. Navigates to `https://www.linkedin.com/login`.
-2. Fills the `#username` and `#password` input fields.
-3. Clicks the submit button.
-4. Waits 5 seconds and checks if the URL contains `/feed/`.
-5. Returns `True` if login succeeded.
+- **Search by name** — enter a person's name, results are cached for instant future lookups
+- **View profile cards** — photo, name, headline, location at a glance
+- **Detail modal** — click any card for the full profile (About, Experience, Education, Skills, Certifications, Languages, etc.)
+- **Reference number lookup** — retrieve previously scraped profiles by their reference ID
+- **Export** — download individual profiles as JSON directly from the detail view
 
-#### `extract_profile(profile_url, _retry=0)` Method — **The Core Method**
+### Task Bucket System
 
-This is the most important method in the entire system. Given a LinkedIn profile URL, it returns a complete structured dictionary of every visible data field.
+The Task Bucket is a persistent, background task queue designed for automated/unattended scraping:
 
-**Step 1 — Navigate to the profile:**
-```python
-await self.page.goto(profile_url, wait_until='domcontentloaded', timeout=60000)
-await asyncio.sleep(5)  # Wait for JS to render
-```
-
-**Step 2 — First scroll pass (load lazy content):**
-The method scrolls down 12 times in steps of 500 pixels with 0.8-second pauses. LinkedIn uses lazy loading — sections only render when they enter the viewport. Without scrolling, most sections below the fold are invisible.
-
-**Step 3 — Expand all hidden sections (CRITICAL):**
-LinkedIn collapses most sections behind "Show all" and "See more" buttons. The scraper:
-
-- Tries a list of known CSS selectors for expand buttons:
-  - `button[aria-label*="show all"]`
-  - `button.inline-show-more-text__button`
-  - `.lt-line-clamp__more`
-  - `button.artdeco-button--tertiary`
-  - etc.
-- For each selector, finds all matching elements and clicks every visible one.
-- Then runs a JavaScript snippet that finds any button or span whose visible text contains "Show all", "See more", "Show more", "…more" and clicks them all.
-- After clicking, waits 1 second for the expanded content to render.
-
-**Step 4 — Second scroll pass:**
-Scrolls down 6 more times (600px each) to load any content that appeared after expansion, then scrolls back to top.
-
-**Step 5 — JavaScript data extraction:**
-Runs a single `page.evaluate()` call that reads:
-- `h1` element → `name`
-- `.text-body-medium` → `headline`
-- `.text-body-small.inline.t-black--light` → `location`
-- `img.pv-top-card-profile-picture__image` → `profile_picture` URL
-- `.pv-top-card--list .t-bold` → `connections` count
-- `document.body.innerText` → `full_text` (the entire visible text of the page)
-
-**Step 6 — Strip Activity/Posts:**
-Calls `_strip_posts()` to remove the social media feed content (LinkedIn posts, "Suggested for you" sections) that appears mid-page and would corrupt the structured section parsing.
-
-**Step 7 — Extract Contact Info:**
-Calls `_extract_contact_info()` to attempt extracting email, phone, and website from the Contact Info modal.
-
-**Step 8 — Parse all sections:**
-Calls 11 different parsing methods on the cleaned text, each responsible for one LinkedIn section.
-
-**Step 9 — Build result dict:**
-Assembles the final dictionary with all 25 fields and returns it.
-
-#### `_extract_contact_info()` Method
-
-**What it does:**
-LinkedIn hides email, phone, and website behind a modal that only appears when you click the "Contact info" link. This method:
-1. Searches for the contact info link using CSS selectors: `a[href*="contact-info"]`, `#top-card-text-details-contact-info`.
-2. If found, clicks the link and waits 2 seconds for the modal to open.
-3. Runs JavaScript to scan modal sections for `a[href^="mailto:"]` (email), `span.t-14` near phone-related text (phone), and external `a[href^="http"]` links (website).
-4. Closes the modal by clicking `button[aria-label="Dismiss"]`.
-5. Returns `{'email': '...', 'phone': '...', 'website': '...'}`.
-
-#### `_ALL_SECTION_MARKERS` Class Variable
-
-A list of all known LinkedIn section headers:
-```python
-['About', 'Experience', 'Education', 'Licenses & certifications',
- 'Skills', 'Honors & awards', 'Languages', 'Volunteer experience',
- 'Projects', 'Publications', 'Courses', 'Recommendations',
- 'Interests', 'Activity', 'Featured', 'Organizations',
- 'Patents', 'Test scores', 'Volunteer']
-```
-Every parsing method uses this list as its `end_markers` so that it stops reading when it hits the next section header.
-
-#### `_strip_posts(text)` Method
-
-**What it does:**
-Iterates line by line through the raw page text. When it encounters a line matching `['Activity', 'Suggested for you', 'People also viewed', 'People you may know']`, it sets a `skipping = True` flag and discards all subsequent lines until it encounters a resume section header (like `Experience`, `Skills`, etc.). This removes LinkedIn's social feed content that otherwise bleeds into profile data.
-
-#### `_parse_section(text, start_markers, end_markers)` Method
-
-**What it does:**
-A generic multi-line text extractor. It scans line by line:
-1. If the current line matches any item in `start_markers`, starts capturing.
-2. Continues capturing lines until it encounters a line in `end_markers`.
-3. Returns all captured non-empty lines joined with newlines.
-
-Used to parse the "About" section.
-
-#### `_parse_experience(text)` Method
-
-**What it does:**
-Parses the **first** experience entry (the current job). Finds the `Experience` header line, then captures lines until the next section marker. Returns a dictionary:
-```json
-{
-  "title": "Project Head (St. Mary's College Website)",
-  "company": "St. Mary's College, Kegalle",
-  "duration": "2023 - Present",
-  "location": "Kegalle, Sri Lanka"
-}
-```
-
-#### `_parse_all_experiences(text)` Method
-
-**What it does:**
-Same as `_parse_experience` but groups all lines under the Experience section into blocks of 4 lines each (title, company, duration, location) and returns a list of experience dictionaries.
-
-#### `_parse_education(text)` Method
-
-**What it does:**
-Finds the `Education` header, captures lines until the next section marker, and groups them into blocks of 3 lines each:
-```json
-{
-  "institution": "University of Hertfordshire",
-  "degree": "BSc (Hons) in Data Science",
-  "dates": "2024 – 2028"
-}
-```
-
-#### `_parse_certifications(text)` Method
-
-**What it does:**
-Finds the `Licenses & certifications` header, captures lines until the next section, groups into blocks of 3:
-```json
-{
-  "name": "AWS Certified Solutions Architect",
-  "issuer": "Amazon Web Services (AWS)",
-  "date": "Issued Jan 2023"
-}
-```
-
-#### `_parse_skills(text)` Method
-
-**What it does:**
-Finds the `Skills` header, filters out endorsement metadata lines (lines containing "Endorsed by", "endorsements", "colleagues at"), and groups what remains:
-- If the next line after a skill name starts with a digit (endorsement count like "99+" or "47 endorsements"), captures it as the `endorsements` field.
-```json
-{
-  "skill": "Python",
-  "endorsements": "47"
-}
-```
-
-#### `_parse_honors(text)` Method
-
-**What it does:**
-Finds `Honors & awards`, captures lines, groups into blocks of 4:
-```json
-{
-  "title": "Best Researcher Award",
-  "issuer": "IEEE Sri Lanka",
-  "date": "2022",
-  "description": "Awarded for outstanding contribution..."
-}
-```
-
-#### `_parse_languages(text)` Method
-
-**What it does:**
-Finds `Languages`, captures lines, and for each pair checks if the second line contains a proficiency keyword (`Native`, `Bilingual`, `Full professional`, `Professional working`, `Limited working`, `Elementary`, `proficiency`):
-```json
-{
-  "language": "English",
-  "proficiency": "Native or bilingual proficiency"
-}
-```
-
-#### `_parse_projects(text)` Method
-
-**What it does:**
-Finds `Projects`, groups into blocks of 4 (title, dates, associated_with, description):
-```json
-{
-  "title": "Project P_HACK",
-  "dates": "2023 – Present",
-  "associated_with": "GitHub",
-  "description": "Collection of Python scripts for system security checks, password analysis, and scanning tools."
-}
-```
-
-#### `_parse_volunteer(text)` Method
-
-**What it does:**
-Finds `Volunteer experience`, groups into blocks of 4 (role, organization, duration, cause):
-```json
-{
-  "role": "Mentor",
-  "organization": "CoderDojo Sri Lanka",
-  "duration": "2019 – Present",
-  "cause": "Education"
-}
-```
-
-#### `_parse_publications(text)` Method
-
-**What it does:**
-Finds `Publications`, groups into blocks of 4 (title, publisher, date, description):
-```json
-{
-  "title": "Deep Learning for Medical Imaging",
-  "publisher": "IEEE Access",
-  "date": "2023",
-  "description": "This paper presents..."
-}
-```
-
-#### `_parse_courses(text)` Method
-
-**What it does:**
-Finds `Courses`, groups into blocks of 2 (name, associated_with):
-```json
-{
-  "name": "Machine Learning Specialization",
-  "associated_with": "Stanford University Online"
-}
-```
-
-#### `_parse_recommendations(text)` Method
-
-**What it does:**
-Finds `Recommendations`, skips `Received`/`Given` sub-headers, groups remaining lines into blocks of 3 (recommender, title, text):
-```json
-{
-  "recommender": "Jane Doe",
-  "title": "Senior Engineer at Google",
-  "text": "I had the pleasure of working with..."
-}
-```
-
-#### `_parse_interests(text)` Method
-
-**What it does:**
-Finds `Interests`, captures lines while filtering out navigation labels (`Top Voices`, `Companies`, `Groups`, `Schools`, `Newsletters`, `Follow`, `followers`). Returns a flat list of interest names:
-```json
-["Google", "Microsoft Sri Lanka", "IEEE", "Harvard Business Review"]
-```
-
-#### `search_people(first_name, last_name, company, max_results, force_search)` Method
-
-**What it does:**
-Performs a LinkedIn people search. Constructs a search URL like:
-`https://www.linkedin.com/search/results/people/?keywords=John+Doe+Google`
-
-Scrolls the results page and extracts profile URLs, names, profile pictures, and headlines from search result cards using JavaScript selectors targeting LinkedIn's search result containers (`.reusable-search__result-container`, `.entity-result__item`).
-
-#### `search_and_extract(first_name, last_name, company, max_profiles)` Method
-
-**What it does:**
-Combines `search_people()` + `extract_profile()`. Searches for up to `max_profiles` results and extracts the full profile for each one. Returns `{'success': True, 'profiles_extracted': N, 'profiles': [...]}`.
-
-#### `close()` Method
-
-**What it does:**
-Gracefully closes the Playwright browser context and stops the Playwright engine. Always call this when shutting down the application to free resources.
-
-
-### 3.3 `llm_parser.py` — The AI Parser
-
-**File purpose:** An optional AI-powered parsing layer. When enabled with an OpenAI API key, it can parse raw HTML using GPT-3.5-turbo as an alternative or fallback to the text-based parsers in `core.py`. By default it is **disabled** (`use_ai=False`).
-
-#### `LLMParser` Class
-
-```python
-parser = LLMParser(use_ai=True, api_key="sk-...")
-```
-
-#### `__init__(use_ai, api_key)` Method
-
-- If `use_ai=True` and a valid `api_key` is provided, instantiates an `OpenAI` client.
-- If the `openai` package is not installed, logs a warning and sets `use_ai = False`.
-- If initialisation fails for any reason, gracefully degrades to `use_ai = False`.
-
-#### `parse_profile_html(html)` Method
-
-- If `use_ai` is False or the client is not initialised, returns `None` immediately.
-- Sends the first 10,000 characters of the provided HTML to `gpt-3.5-turbo` with a system prompt instructing it to return a JSON object with fields: `name`, `headline`, `location`, `about`, `experiences`, `education`, `skills`.
-- Parses the response by finding the first `{` and last `}` in the response text.
-- Returns the parsed dictionary or `None` if parsing fails.
+1. **Add tasks** via the admin UI or API — by name, URL, or structured search
+2. **Worker auto-processes** tasks one by one in the background
+3. **Configurable rest periods** between tasks (default: 30 seconds) to avoid LinkedIn rate limits
+4. **Pause/resume** the worker at any time
+5. **Auto-resumes** on server restart — any pending tasks from previous runs continue processing
+6. **SSE notifications** broadcast status changes to all connected admins in real-time
 
 ---
 
-### 3.4 `session_manager.py` — The Session Manager
+## 📡 REST API Reference
 
-**File purpose:** Handles saving and loading LinkedIn browser session cookies to/from disk as `.pkl` files. This allows you to export a logged-in session from one machine and import it on another.
+All endpoints return JSON. Base URL: `http://localhost:5000`
 
-#### `SessionManager` Class
+### Scraper Control
 
-```python
-manager = SessionManager(sessions_dir="sessions")
+<details>
+<summary><code>POST /api/scraper/init</code> — Initialize the browser</summary>
+
+**Request Body:**
+```json
+{
+  "headless": true,
+  "browser_type": "chromium",
+  "session_name": "default"
+}
 ```
 
-Creates the `sessions/` directory if it does not exist.
+**Response:**
+```json
+{ "success": true, "message": "Browser initialized" }
+```
+</details>
 
-#### `save_session(name, cookies)` Method
+<details>
+<summary><code>POST /api/scraper/login</code> — Log in to LinkedIn</summary>
 
-- Serialises the cookie list (a list of dicts in Playwright's format) to a pickle file at `sessions/{name}.pkl`.
-- Also stores the creation timestamp and session name alongside the cookies.
-- Returns `True` on success, `False` on failure.
+**Request Body:**
+```json
+{
+  "email": "user@example.com",
+  "password": "your_password"
+}
+```
 
-#### `load_session(name)` Method
+**Response:**
+```json
+{ "success": true, "message": "Login successful!" }
+```
+</details>
 
-- Reads `sessions/{name}.pkl` and returns the cookie list.
-- Returns `None` if the session file does not exist or cannot be loaded.
+<details>
+<summary><code>GET /api/scraper/stats</code> — Get scraper health & statistics</summary>
 
-#### `list_sessions()` Method
+**Response:**
+```json
+{
+  "success": true,
+  "stats": {
+    "requests_made": 42,
+    "profiles_scraped": 38,
+    "errors": 4,
+    "runtime_seconds": 3600.5,
+    "is_authenticated": true
+  }
+}
+```
+</details>
 
-- Scans the `sessions/` directory for all `.pkl` files.
-- Returns a list of session names (file stems without `.pkl` extension).
+<details>
+<summary><code>POST /api/scraper/search</code> — Search LinkedIn for people</summary>
 
-#### `delete_session(name)` Method
+**Request Body:**
+```json
+{
+  "first_name": "John",
+  "last_name": "Doe",
+  "company": "Google",
+  "max_results": 10
+}
+```
 
-- Deletes `sessions/{name}.pkl` from disk.
-- Returns `True` if the file existed and was deleted, `False` otherwise.
+**Response:**
+```json
+{
+  "success": true,
+  "results": [
+    {
+      "profile_url": "https://www.linkedin.com/in/johndoe",
+      "name": "John Doe",
+      "profile_picture": "https://media.licdn.com/...",
+      "headline": "Software Engineer at Google"
+    }
+  ],
+  "total": 5
+}
+```
+</details>
+
+<details>
+<summary><code>POST /api/scraper/search-and-extract</code> — Search & extract all found profiles</summary>
+
+**Request Body:**
+```json
+{
+  "first_name": "Jane",
+  "last_name": "Smith",
+  "company": ""
+}
+```
+
+**Response (202 Accepted):**
+```json
+{
+  "success": true,
+  "status": "started",
+  "message": "Scraping started in background. Please check back later."
+}
+```
+</details>
+
+<details>
+<summary><code>POST /api/scraper/close</code> — Close the browser</summary>
+
+**Response:**
+```json
+{ "success": true, "message": "Closed" }
+```
+</details>
 
 ---
 
-### 3.5 `templates/index.html` — The Admin Dashboard
+### Client API
 
-**File purpose:** A single-page web application served at `/`. This is the **admin-facing interface** for operating the scraper. Built with vanilla HTML, CSS, and JavaScript (no external framework). Uses AJAX (Fetch API) to communicate with the Flask backend.
+<details>
+<summary><code>POST /api/client/scrape</code> — Submit a search request (auto-queued to Task Bucket)</summary>
 
-#### Sections / Tabs
+**Request Body:**
+```json
+{ "name": "John Doe" }
+```
 
-| Tab | What It Shows |
-|---|---|
-| **Dashboard** | Overview stats (total profiles, today's scrapes, success rate), recent scrapes table, quick scrape input |
-| **Scraper** | Initialize scraper, login form, single URL scrape form, bulk URL scrape (textarea for multiple URLs), job status monitor |
-| **Profiles** | Browse all profiles in the master database, search/filter by name or headline, view full profile details in a modal |
-| **Export** | Download the entire database as JSON or CSV |
-| **Settings** | Scraper configuration (headless mode, session name) |
+**Response (cached):**
+```json
+{
+  "success": true,
+  "cached": true,
+  "profiles": [ { ... } ],
+  "total": 3,
+  "reference_number": "cached_John Doe"
+}
+```
 
-#### Key JavaScript Functions
+**Response (queued — 202):**
+```json
+{
+  "success": true,
+  "status": "queued",
+  "reference_number": "a1b2c3d4-...",
+  "message": "Task queued in the bucket. The worker will process it automatically."
+}
+```
+</details>
 
-| Function | Description |
-|---|---|
-| `initScraper()` | Calls `POST /api/scraper/init` to start the browser |
-| `scrapeProfile(url)` | Calls `POST /api/scraper/scrape` with a URL, stores the `return_code`, starts polling |
-| `pollJobStatus(code)` | Calls `GET /api/scraper/results/{code}` every 3 seconds until status is `completed` or `failed` |
-| `loadProfiles()` | Calls `GET /api/scraper/profiles` and renders the profiles grid |
-| `exportData(format)` | Calls `POST /api/scraper/export` with format=`json` or `csv` and triggers file download |
+<details>
+<summary><code>GET /api/client/scrape-status</code> — Poll task status</summary>
+
+**Query Parameters:** `?task_id=...` or `?name=...`
+
+**Response (in progress — 202):**
+```json
+{
+  "success": true,
+  "status": "in_progress",
+  "message": "Currently scraping LinkedIn profiles…"
+}
+```
+
+**Response (completed — 200):**
+```json
+{
+  "success": true,
+  "status": "completed",
+  "profiles": [ { ... } ],
+  "total": 3
+}
+```
+</details>
+
+<details>
+<summary><code>GET/POST /api/client/retrieve</code> — Retrieve results by return code</summary>
+
+**Query/Body:** `return_code`
+
+**Response:**
+```json
+{
+  "success": true,
+  "status": "completed",
+  "profile": { ... },
+  "csv_url": "/api/client/download/csv?return_code=abc123"
+}
+```
+</details>
+
+<details>
+<summary><code>GET/POST /api/client/lookup-by-reference</code> — Retrieve by reference number</summary>
+
+**Query/Body:** `reference_number`
+
+**Response:**
+```json
+{
+  "success": true,
+  "status": "completed",
+  "reference_number": "a1b2c3d4-...",
+  "person_name": "John Doe",
+  "scraped_at": "2026-06-30T10:15:00",
+  "is_bulk": false,
+  "profiles": [ { ... } ],
+  "total": 1
+}
+```
+</details>
+
+<details>
+<summary><code>GET /api/client/download/{format}</code> — Download results</summary>
+
+**Formats:** `csv`, `json`, `pdf`
+
+**Query:** `?return_code=abc123`
+
+**Response:** File download
+</details>
 
 ---
 
-### 3.6 `templates/client.html` — The Client View
+### Admin API
 
-**File purpose:** A clean, read-only profile viewer served at `/client`. This is the **client-facing interface** — it presents scraped profiles in a polished card layout without any scraper controls. Clients can browse profiles, view full details, filter by name/field, and export individual profiles.
-
-#### Features
-
-- **Profile cards** showing photo, name, headline, location, and connections count.
-- **Detail modal** when you click a profile — shows every section (About, Experience, Education, Skills, Languages, Certifications, Projects, Volunteer, Publications, Recommendations, Interests).
-- **Search and filter** by name, headline, or field category.
-- **Sort controls** — sort by name or scrape date.
-- **Export individual profile** as JSON directly from the detail modal.
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/api/admin/approvals` | List all scrape requests (jobs + task bucket) |
+| `POST` | `/api/admin/approve` | Retry/re-scrape a failed or stalled job |
+| `POST` | `/api/admin/scrape-requested-name` | Manually scrape a specific name |
+| `GET` | `/api/admin/db-profiles` | Get all profiles from the master database |
+| `GET` | `/api/admin/download-db/json` | Download master database as JSON |
+| `GET` | `/api/admin/download-db/csv` | Download master database as CSV |
+| `POST` | `/api/admin/destroy-db` | ⚠️ Delete the entire database |
+| `GET` | `/api/admin/events` | SSE stream for real-time updates |
 
 ---
 
-## 4. Data Output Schema
+### Task Bucket API
 
-Every scraped profile is saved as a JSON object with the following 25 fields:
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | `/api/bucket/add` | Add name/URL tasks to the queue |
+| `POST` | `/api/bucket/add-search` | Add a structured name-based search task |
+| `GET` | `/api/bucket/status` | Get full queue status with summary counts |
+| `POST` | `/api/bucket/pause` | Pause the background worker |
+| `POST` | `/api/bucket/resume` | Resume the background worker |
+| `POST` | `/api/bucket/config` | Update worker config (e.g., `rest_seconds`) |
+| `POST` | `/api/bucket/remove` | Remove a pending task by ID |
+| `POST` | `/api/bucket/clear` | Remove completed/failed tasks from queue |
+
+<details>
+<summary>Task Bucket — Add Tasks Example</summary>
+
+```bash
+# Add multiple tasks
+curl -X POST http://localhost:5000/api/bucket/add \
+  -H "Content-Type: application/json" \
+  -d '{"queries": ["John Doe", "https://linkedin.com/in/janedoe"], "type": "name"}'
+
+# Add a structured search
+curl -X POST http://localhost:5000/api/bucket/add-search \
+  -H "Content-Type: application/json" \
+  -d '{"first_name": "Jane", "last_name": "Smith", "company": "Google", "max_results": 5}'
+```
+</details>
+
+<details>
+<summary>Task Bucket — Status Response</summary>
+
+```json
+{
+  "success": true,
+  "worker_running": true,
+  "worker_paused": false,
+  "rest_seconds": 30,
+  "summary": {
+    "pending": 3,
+    "in_progress": 1,
+    "completed": 12,
+    "failed": 2,
+    "total": 18
+  },
+  "tasks": [ { ... } ]
+}
+```
+</details>
+
+---
+
+### Export API
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | `/api/scraper/export` | Export data as downloadable JSON or CSV |
+| `POST` | `/api/export-text-pdf` | Export raw text as PDF |
+| `POST` | `/api/export-profile-pdf` | Export a single profile as a formatted PDF |
+| `POST` | `/api/export-bulk-pdf` | Export multiple profiles as a single PDF |
+
+---
+
+### Profile Ranking API
+
+<details>
+<summary><code>POST /api/rank</code> — Rank profiles using the scoring model</summary>
+
+**Request Body:**
+```json
+{
+  "profiles": [
+    { "name": "...", "headline": "...", "location": "Colombo, Sri Lanka", ... },
+    { "name": "...", "headline": "...", "location": "Kandy, Sri Lanka", ... }
+  ]
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "total_input": 10,
+  "sri_lankan_count": 7,
+  "non_sri_lankan_filtered": 3,
+  "ranked": [
+    {
+      "rank": 1,
+      "profile": { ... },
+      "scoring": {
+        "total_score": 127.5,
+        "profile_strength": 89.0,
+        "field_follower_score": 38.5,
+        "field_category": "Software & IT",
+        "connections_count": 500,
+        "breakdown": { ... }
+      },
+      "tier": {
+        "label": "Elite",
+        "color": "#7c3aed",
+        "icon": "fa-crown"
+      }
+    }
+  ]
+}
+```
+</details>
+
+---
+
+### Bulk Scraping API (Persona-branded)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | `/api/persona/bulk-scrape` | Submit bulk scrape with custom `return_code` |
+| `GET/POST` | `/api/persona/bulk-retrieve` | Retrieve bulk scrape results (with 1-min delay policy) |
+
+---
+
+## 📊 Data Schema
+
+Every scraped profile is stored as a JSON object with the following fields:
 
 ```json
 {
   "name": "Bawantha Beliwaththa",
   "headline": "BSc (Hons) Data Science Undergrad | Developer",
   "location": "Kegalle, Sabaragamuwa, Sri Lanka",
-  "profile_picture": "https://avatars.githubusercontent.com/u/85686518?v=4",
-  "connections": "500+",
-  "about": "BSc (Hons) Data Science undergraduate student at the University of Hertfordshire. A technology enthusiast interested in Data Science, Machine Learning, Web Development, and Cybersecurity.",
-  "email": "bawantha@example.com",
-  "phone": "+94 77 111 2222",
-  "website": "https://bawanthabeliwaththa.github.io/",
+  "connections": "500+ connections",
+  "profile_picture": "https://media.licdn.com/...",
+  "about": "BSc (Hons) Data Science undergraduate...",
   "current_job": {
-    "title": "Project Head (St. Mary's College Website)",
+    "title": "Project Head",
     "company": "St. Mary's College, Kegalle",
     "duration": "2023 - Present",
     "location": "Kegalle, Sri Lanka"
   },
-  "experiences": [
+  "experience": [
     {
-      "title": "Project Head (St. Mary's College Website)",
+      "title": "Project Head",
       "company": "St. Mary's College, Kegalle",
       "duration": "2023 - Present",
       "location": "Kegalle, Sri Lanka"
-    },
-    {
-      "title": "IT Club President & Prefect",
-      "company": "St. Mary's College, Kegalle",
-      "duration": "2021 - 2022",
-      "location": "Kegalle, Sri Lanka"
     }
   ],
-  "education": [
+  "qualifications": [
     {
       "institution": "University of Hertfordshire",
       "degree": "BSc (Hons) in Data Science",
       "dates": "2024 – 2028"
-    },
-    {
-      "institution": "St. Mary's College, Kegalle",
-      "degree": "GCE Advanced Level",
-      "dates": "2019 – 2022"
     }
   ],
   "certifications": [
@@ -619,259 +691,202 @@ Every scraped profile is saved as a JSON object with the following 25 fields:
     }
   ],
   "skills": [
+    { "skill": "Python", "endorsements": "47 endorsements" },
+    { "skill": "Data Science", "endorsements": "35 endorsements" }
+  ],
+  "languages": [
+    { "language": "English", "proficiency": "Professional working proficiency" },
+    { "language": "Sinhala", "proficiency": "Native or bilingual proficiency" }
+  ],
+  "volunteer": [
     {
-      "skill": "Python",
-      "endorsements": "47"
-    },
-    {
-      "skill": "Data Science",
-      "endorsements": "35"
-    },
-    {
-      "skill": "Web Development",
-      "endorsements": "28"
-    },
-    {
-      "skill": "Cybersecurity",
-      "endorsements": "15"
+      "role": "Volunteer Developer",
+      "organization": "SMC Kegalle Devs Team",
+      "duration": "2022 – Present"
     }
   ],
   "honors": [
     {
       "title": "IT Club President Selection",
       "issuer": "St. Mary's College, Kegalle",
-      "date": "2021",
-      "description": "Selected to lead the college IT club activities and project team."
+      "date": "2021"
     }
   ],
-  "languages": [
+  "recommendations": [
     {
-      "language": "English",
-      "proficiency": "Professional working proficiency"
-    },
-    {
-      "language": "Sinhala",
-      "proficiency": "Native or bilingual proficiency"
+      "recommender": "Jane Doe",
+      "title": "Senior Engineer at Google",
+      "text": "I had the pleasure of working with..."
     }
-  ],
-  "projects": [
-    {
-      "title": "Project P_HACK",
-      "dates": "2023 – Present",
-      "associated_with": "GitHub",
-      "description": "Collection of Python scripts for system security checks, password analysis, and scanning tools."
-    },
-    {
-      "title": "Automatic Short Answer Grading Dataset",
-      "dates": "2023",
-      "associated_with": "Kaggle",
-      "description": "Created and curated a dataset for automated grading tasks."
-    }
-  ],
-  "volunteer": [
-    {
-      "role": "Volunteer Developer",
-      "organization": "SMC Kegalle Devs Team",
-      "duration": "2022 – Present",
-      "cause": "Education"
-    }
-  ],
-  "publications": [],
-  "courses": [
-    {
-      "name": "Machine Learning Specialization",
-      "associated_with": "DeepLearning.AI"
-    }
-  ],
-  "recommendations": [],
-  "interests": [
-    "Data Science",
-    "Machine Learning",
-    "Cybersecurity",
-    "Programming Pub"
   ],
   "profile_url": "https://www.linkedin.com/in/beliwaththa",
-  "scraped_at": "2026-06-09T08:14:53.081857"
+  "scraped_at": "2026-06-30T10:15:00.000000"
 }
 ```
 
 ---
 
-## 5. REST API Reference
+## 🔧 Module Reference
 
-All API endpoints return JSON. The base URL is `http://localhost:5000`.
+### `app.py` — Flask Server & Orchestrator
 
-### Initialize Scraper
-```
-POST /api/scraper/init
-Body: { "headless": true, "session_name": "default" }
-Response: { "success": true, "message": "Scraper initialized" }
-```
+The central application entry point (2500+ lines). Manages all HTTP routes, controls the scraper instance, handles file persistence, runs the Task Bucket worker, and broadcasts SSE events.
 
-### Login to LinkedIn
-```
-POST /api/scraper/login
-Body: { "email": "user@example.com", "password": "password123" }
-Response: { "success": true }
-```
+**Key Components:**
 
-### Scrape a Single Profile
-```
-POST /api/scraper/scrape
-Body: { "url": "https://www.linkedin.com/in/username" }
-Response: { "success": true, "return_code": "abc123", "status": "in_progress" }
-```
+| Component | Description |
+|-----------|-------------|
+| `scraper` (global) | Single shared `LinkedInScraper` instance, reused across requests |
+| `_bg_loop` | Dedicated `asyncio` event loop running in a daemon thread for non-blocking Playwright operations |
+| `run_async(coro)` | Helper to submit async coroutines to the background loop and wait for results |
+| `_sse_subscribers` | List of SSE subscriber queues for real-time admin dashboard updates |
+| `_broadcast_sse()` | Pushes events to all connected admin browsers |
+| Task Bucket Worker | Infinite-loop coroutine that processes queued tasks one by one with rest periods |
 
-### Check Job Status / Get Result
-```
-GET /api/scraper/results/<return_code>
-Response (in progress): { "status": "in_progress" }
-Response (completed): { "status": "completed", "data": { ...profile... } }
-Response (failed): { "status": "failed", "error": "..." }
-```
-
-### Bulk Scrape Multiple Profiles
-```
-POST /api/scraper/bulk
-Body: { "urls": ["https://linkedin.com/in/a", "https://linkedin.com/in/b"] }
-Response: { "success": true, "return_code": "xyz789", "status": "in_progress" }
-```
-
-### Get All Stored Profiles
-```
-GET /api/scraper/profiles
-Response: { "profiles": [...], "total": 47 }
-```
-
-### Export Data
-```
-POST /api/scraper/export
-Body: { "data": {...}, "format": "json" }   ← format can be "json" or "csv"
-Response: File download
-```
-
+**Thread Safety:** Three `threading.Lock` instances protect concurrent access:
+- `api_scrape_lock` — guards per-job file writes
+- `db_lock` — guards master database reads/writes
+- `bucket_lock` — guards task queue file access
 
 ---
 
+### `core.py` — LinkedIn Scraper Engine
+
+The heart of the system (1055 lines). Contains the `LinkedInScraper` class that uses Playwright to control a real Chromium browser.
+
+**Extraction Strategy (V4 — Detail Sub-Page Navigation):**
+
+Unlike earlier versions that parsed the main profile page text, V4 navigates to each dedicated detail sub-page:
+
+| Detail Page | URL Pattern | Data Extracted |
+|-------------|-------------|----------------|
+| Experience | `/details/experience/` | Job titles, companies, durations, locations |
+| Education | `/details/education/` | Institutions, degrees, dates |
+| Skills | `/details/skills/` | Skill names, endorsement counts |
+| Certifications | `/details/certifications/` | Cert names, issuers, dates |
+| Honors | `/details/honors/` | Award titles, issuers, dates |
+| Languages | `/details/languages/` | Language names, proficiency levels |
+| Volunteer | `/details/volunteering-experiences/` | Roles, organizations, durations |
+| Recommendations | `/details/recommendations/` | Recommenders, titles, text |
+
+**Anti-Detection Measures:**
+- Realistic Chrome 134 user agent string
+- `navigator.webdriver` property hidden via init script
+- Persistent browser context (not fresh sessions)
+- Human-like scrolling with randomized delays
+
+**UI Noise Filtering:**
+A comprehensive noise filter (`_is_noise()`) removes 50+ known LinkedIn UI elements (navigation labels, expand buttons, sidebar text, connection badges) from the raw text before parsing.
 
 ---
 
-## 6. Installation & Setup
+### `ranker.py` — Profile Scoring & Ranking
 
-### Prerequisites
+A weighted scoring model (363 lines) that ranks LinkedIn profiles on a 0–150 point scale:
 
-- Python 3.9 or higher
-- pip
-- A valid LinkedIn account
+**Profile Strength (0–100 points):**
 
-### Step 1: Clone / Copy the project
+| Component | Max Points | Scoring Logic |
+|-----------|-----------|---------------|
+| Headline | 12 | 8 pts for presence + up to 4 pts for length |
+| About | 14 | 8 pts for presence + up to 6 pts for length |
+| Experience Count | 15 | 3 pts per experience (max 15) |
+| Experience Quality | 8 | Description richness + duration presence |
+| Education | 8 | 4 pts per entry (max 8) |
+| Skills | 10 | 1 pt per skill (max 10) |
+| Certifications | 8 | 2 pts per cert (max 8) |
+| Featured | 5 | Binary (has featured content or not) |
+| Connections | 6 | Proportional to 500 connections |
+| Profile Photo | 4 | Baseline bonus |
+| Recommendations | 5 | 2.5 pts each (max 5) |
+| Volunteer | 3 | Binary |
+| Languages | 2 | 1 pt per language (max 2) |
 
-```
-Copy the V4/ folder to your working directory.
-```
+**Field-Aligned Follower Score (0–50 points):**
 
-### Step 2: Install Python dependencies
+Combines connection count (60% weight) with field keyword density (40% weight) across 11 industry categories:
 
-```bash
-pip install -r req.txt
-```
+`Software & IT` · `Data & Analytics` · `Finance & Banking` · `Marketing & Sales` · `Healthcare & Medicine` · `Education & Research` · `Engineering & Manufacturing` · `Design & Creative` · `Legal & Compliance` · `Management & Leadership` · `HR & People`
 
-### Step 3: Install Playwright browsers
+**Tier Labels:**
 
-```bash
-playwright install chromium
-```
+| Score | Tier | Color |
+|-------|------|-------|
+| 120+ | 👑 Elite | Purple |
+| 100–119 | ⭐ Expert | Green |
+| 80–99 | 👍 Strong | Blue |
+| 60–79 | 📈 Moderate | Amber |
+| < 60 | 🌱 Beginner | Gray |
 
-### Step 4: (Optional) Create a `.env` file
-
-```
-OPENAI_API_KEY=sk-...    # Only needed if using the LLM parser
-```
-
-### Step 5: Run the server
-
-```bash
-python app.py
-```
-
-The server starts on `http://localhost:5000`.
-
-### Step 6: Log in to LinkedIn
-
-1. Open `http://localhost:5000` in your browser.
-2. Go to the **Scraper** tab.
-3. Click **Initialize Scraper** (choose `headless: false` if you want to see the browser window).
-4. Click **Login** and enter your LinkedIn credentials.
-5. After login, the session is saved to `browser_data/default/` and will persist across restarts.
+> **Note:** The ranker currently geo-filters for Sri Lankan profiles only. Profiles without Sri Lanka in their location/headline/about are excluded from ranking results.
 
 ---
 
-## 7. How to Use
+### `llm_parser.py` — AI Parser (Optional)
 
-### Scraping a Single Profile
-
-1. Go to the **Scraper** tab.
-2. Paste a LinkedIn profile URL in the input box (e.g. `https://www.linkedin.com/in/username`).
-3. Click **Scrape Profile**.
-4. A job is created in the background. The UI polls every 3 seconds and shows `In Progress…` → `Completed`.
-5. Once done, the full profile appears. It is also saved to `exports/all_scraped_profiles.json`.
-
-### Scraping Multiple Profiles
-
-1. Go to the **Scraper** tab → **Bulk Scrape** section.
-2. Paste one LinkedIn URL per line in the textarea.
-3. Click **Start Bulk Scrape**.
-4. Each profile is scraped with a 4-second delay between requests.
-
-### Viewing Profiles
-
-- Go to the **Profiles** tab to browse all stored profiles.
-- Use the search box to filter by name or headline.
-- Click any profile card to open the full detail modal.
-- For the client-friendly view, go to `http://localhost:5000/client`.
-
-
-### Exporting Data
-
-- Go to the **Export** tab.
-- Click **Download JSON** or **Download CSV** to get the full database.
+An optional AI-powered parsing layer (57 lines). When enabled with an OpenAI API key, it sends raw HTML to GPT-3.5-turbo for structured extraction. Disabled by default (`use_ai=False`). Gracefully degrades if the `openai` package is not installed.
 
 ---
 
-## 8. Screenshots
+### `session_manager.py` — Browser Session Persistence
 
-### Dashboard — Main Control Panel
-![Dashboard](screenshots/dashboard.png)
-
-The admin dashboard shows real-time scraper status, statistics, and provides the main scraping controls. You can initialize the scraper, enter a LinkedIn URL, and see job progress from this single screen.
+Handles saving/loading LinkedIn browser session cookies to/from `.pkl` files (52 lines). Allows exporting a logged-in session from one machine and importing it on another.
 
 ---
 
-### Profile Detail View — All LinkedIn Sections
-![Profile View](screenshots/profile_view.png)
+## ⚙ Configuration
 
-Every scraped LinkedIn section is displayed in a structured card layout: About, Experience, Education, Skills with endorsement counts, Certifications, Languages with proficiency levels, and more.
+### Environment Variables
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `OPENAI_API_KEY` | No | OpenAI API key for the optional AI parser |
+
+### Task Bucket Configuration
+
+Configure via `POST /api/bucket/config`:
+
+```json
+{ "rest_seconds": 30 }
+```
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `rest_seconds` | `30` | Seconds to wait between processing tasks (rate limiting) |
+
+### Scraper Initialization Options
+
+Passed via `POST /api/scraper/init`:
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `headless` | `false` | Run browser without visible window |
+| `browser_type` | `chromium` | Browser engine (only Chromium supported) |
+| `session_name` | `default` | Subfolder inside `browser_data/` for persistent profile |
 
 ---
 
-
----
-
-### JSON Output — Complete Data Schema
-![JSON Output](screenshots/json_output.png)
-
-The scraper outputs a fully structured JSON object for every profile with 25 fields covering every visible LinkedIn section — from basic info to recommendations and interests.
-
----
-
-## 9. Known Limitations
+## ⚠ Known Limitations
 
 | Limitation | Description |
-|---|---|
-| **LinkedIn Login Required** | The scraper requires you to be logged into a valid LinkedIn account. Anonymous access returns very limited data. |
-| **Contact Info Visibility** | Email, phone, and website are only visible if the profile owner has shared them with connections. They will be empty strings if not shared with you. |
-| **"Show More" Buttons** | Some profiles have sections deep in the page that require specific expand buttons beyond the generic ones clicked. Parsing accuracy may vary by profile layout. |
-| **Rate Limiting** | LinkedIn may temporarily restrict your account if you scrape too many profiles in quick succession. The 4-second delay in bulk mode is a safety measure but not a guarantee. |
-| **LinkedIn DOM Changes** | LinkedIn occasionally updates its HTML structure. If selectors break, the scraper may fall back to text-only parsing and some structured fields (like `name`, `headline`) may be empty. |
-| **Section Ordering** | The text parser relies on section headers appearing in a consistent order. If LinkedIn reorders sections for a specific profile or A/B test, some sections may not parse correctly. |
-| **Sections Requiring Extra Clicks** | Some profiles have very deep sections (e.g., full recommendations text, complete project descriptions) that require additional "show more" interactions not currently automated. |
+|-----------|-------------|
+| **LinkedIn Login Required** | A valid, logged-in LinkedIn account is required. Anonymous access returns minimal data. |
+| **Rate Limiting** | LinkedIn may temporarily restrict your account if you scrape too many profiles in quick succession. The configurable rest period in the Task Bucket helps, but is not a guarantee. |
+| **Contact Info Visibility** | Email, phone, and website are only visible if the profile owner has shared them with your connection level. |
+| **LinkedIn DOM Changes** | LinkedIn periodically updates its HTML structure. Selectors may need updating if LinkedIn pushes UI changes. |
+| **Section Ordering** | The text parser relies on section headers appearing in a consistent order. A/B tests by LinkedIn may occasionally affect parsing accuracy. |
+| **Geo-Filter in Ranker** | The ranking module currently only scores profiles geo-located in Sri Lanka. Non-Sri Lankan profiles are filtered out. |
+| **Single Browser Instance** | Only one scraper instance runs at a time. Concurrent scrape requests are queued, not parallelized. |
+| **No CAPTCHA Handling** | If LinkedIn presents a CAPTCHA challenge, the scraper will fail. Manual intervention is required. |
+
+---
+
+## 📝 License
+
+This project is for **educational and research purposes only**. Scraping LinkedIn may violate their [Terms of Service](https://www.linkedin.com/legal/user-agreement). Use responsibly and at your own risk.
+
+---
+
+<p align="center">
+  <strong>Built with ❤️ using Python, Flask, and Playwright</strong>
+</p>
