@@ -400,8 +400,12 @@
                         Browser</button>
                     <button class="btn btn-success" onclick="loginToLinkedIn()" id="btnLogin" disabled>Login</button>
                     <button class="btn btn-danger" onclick="closeScraper()" id="btnClose" disabled>Close</button>
+                    <button class="btn btn-warning" onclick="killBrowser()" id="btnKill" title="Force-kill any stuck browser processes before re-initializing">
+                        <i class="fas fa-skull"></i> Force Kill Browser
+                    </button>
                 </div>
                 <div id="setupStatus"></div>
+
                 
                 <div style="margin-top: 35px; border-top: 2px solid #e5e7eb; padding-top: 25px;">
                     <h3 style="color:#0a66c2; margin-bottom: 15px;"><i class="fas fa-database"></i> Master Scraped Database</h3>
@@ -634,11 +638,34 @@
             try {
                 const res = await fetch('/api/scraper/init', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ headless: settings.headless, browser_type: settings.browserType, session_name: document.getElementById('sessionName').value }) });
                 const data = await res.json();
-                if (data.success) { state.initialized = true; showToast('Browser initialized', 'success'); showAlert('setupStatus', 'Browser ready', 'success'); }
-                else { showAlert('setupStatus', 'Init failed: ' + data.error, 'error'); }
+                if (data.success) { state.initialized = true; showToast('Browser initialized', 'success'); showAlert('setupStatus', '✅ Browser ready', 'success'); }
+                else {
+                    showAlert('setupStatus', '❌ Init failed: ' + data.error, 'error');
+                    // If init failed due to a locked profile, suggest using Force Kill
+                    if (data.error && (data.error.includes('locked') || data.error.includes('another process'))) {
+                        showAlert('setupStatus', '💡 Tip: Click "Force Kill Browser" to close stale Chromium processes, then try again.', 'info');
+                    }
+                }
             } catch (e) { showAlert('setupStatus', 'Error: ' + e.message, 'error'); }
-            finally { btn.disabled = false; btn.innerHTML = 'Initialize Browser'; updateUIState(); }
+            finally { btn.disabled = false; btn.innerHTML = '<i class="fas fa-play"></i> Initialize Browser'; updateUIState(); }
         }
+        async function killBrowser() {
+            const btn = document.getElementById('btnKill'); btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Killing...';
+            showAlert('setupStatus', 'Force-killing browser processes...', 'info');
+            try {
+                const res = await fetch('/api/scraper/kill-browser', { method: 'POST' });
+                const data = await res.json();
+                if (data.success) {
+                    state.initialized = false; state.authenticated = false;
+                    showToast('Browser processes terminated', 'success');
+                    showAlert('setupStatus', '✅ All browser processes killed. You can now Initialize again.', 'success');
+                } else {
+                    showAlert('setupStatus', '❌ Kill failed: ' + data.error, 'error');
+                }
+            } catch (e) { showAlert('setupStatus', 'Error: ' + e.message, 'error'); }
+            finally { btn.disabled = false; btn.innerHTML = '<i class="fas fa-skull"></i> Force Kill Browser'; updateUIState(); }
+        }
+
         async function loginToLinkedIn() {
             const email = document.getElementById('email').value.trim(), pwd = document.getElementById('password').value;
             if (!email || !pwd) { showAlert('setupStatus', 'Enter email and password', 'warning'); return; }
