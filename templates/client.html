@@ -722,6 +722,225 @@
             border: 1px solid rgba(239, 68, 68, 0.3);
             color: #fca5a5;
         }
+
+        /* ── My Searches History Section ────────────────────────────── */
+        .search-history-card {
+            background: var(--card-bg);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid var(--border-color);
+            border-radius: 24px;
+            padding: 30px 35px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+            margin-top: 35px;
+            animation: fadeInUp 0.5s ease-out;
+        }
+
+        .search-history-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 20px;
+            padding-bottom: 14px;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .search-history-header h3 {
+            font-weight: 700;
+            font-size: 1.15rem;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .search-history-header h3 i {
+            color: var(--secondary-accent);
+            font-size: 1.2rem;
+        }
+
+        .btn-clear-history {
+            background: rgba(239, 68, 68, 0.12);
+            border: 1px solid rgba(239, 68, 68, 0.25);
+            color: #fca5a5;
+            font-size: 0.8rem;
+            font-weight: 600;
+            padding: 6px 14px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .btn-clear-history:hover {
+            background: rgba(239, 68, 68, 0.25);
+            border-color: rgba(239, 68, 68, 0.5);
+        }
+
+        .history-empty {
+            text-align: center;
+            color: var(--text-muted);
+            padding: 30px 10px;
+            font-size: 0.95rem;
+        }
+
+        .history-empty i {
+            display: block;
+            font-size: 2rem;
+            margin-bottom: 12px;
+            opacity: 0.4;
+        }
+
+        .history-item {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            padding: 14px 16px;
+            border-radius: 14px;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            background: rgba(255, 255, 255, 0.02);
+            margin-bottom: 10px;
+            transition: all 0.25s ease;
+        }
+
+        .history-item:hover {
+            background: rgba(255, 255, 255, 0.06);
+            border-color: rgba(99, 102, 241, 0.3);
+        }
+
+        .history-item-icon {
+            width: 42px;
+            height: 42px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1rem;
+            flex-shrink: 0;
+        }
+
+        .history-item-icon.completed {
+            background: rgba(16, 185, 129, 0.15);
+            color: #6ee7b7;
+        }
+
+        .history-item-icon.pending {
+            background: rgba(245, 158, 11, 0.15);
+            color: #fde68a;
+        }
+
+        .history-item-icon.in_progress {
+            background: rgba(59, 130, 246, 0.15);
+            color: #93c5fd;
+        }
+
+        .history-item-icon.failed {
+            background: rgba(239, 68, 68, 0.12);
+            color: #fca5a5;
+        }
+
+        .history-item-icon.queued {
+            background: rgba(139, 92, 246, 0.15);
+            color: #c4b5fd;
+        }
+
+        .history-item-details {
+            flex-grow: 1;
+            min-width: 0;
+        }
+
+        .history-item-name {
+            font-weight: 600;
+            font-size: 0.95rem;
+            color: white;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .history-item-meta {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 0.78rem;
+            color: var(--text-muted);
+            margin-top: 3px;
+        }
+
+        .history-status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            font-size: 0.72rem;
+            font-weight: 600;
+            padding: 2px 8px;
+            border-radius: 6px;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+
+        .history-status-badge.completed {
+            background: rgba(16, 185, 129, 0.15);
+            color: #6ee7b7;
+        }
+
+        .history-status-badge.pending,
+        .history-status-badge.queued {
+            background: rgba(245, 158, 11, 0.12);
+            color: #fde68a;
+        }
+
+        .history-status-badge.in_progress {
+            background: rgba(59, 130, 246, 0.12);
+            color: #93c5fd;
+        }
+
+        .history-status-badge.failed {
+            background: rgba(239, 68, 68, 0.1);
+            color: #fca5a5;
+        }
+
+        .btn-history-view {
+            background: rgba(99, 102, 241, 0.12);
+            border: 1px solid rgba(99, 102, 241, 0.3);
+            color: #c7d2fe;
+            font-size: 0.78rem;
+            font-weight: 600;
+            padding: 6px 14px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            white-space: nowrap;
+            flex-shrink: 0;
+        }
+
+        .btn-history-view:hover {
+            background: rgba(99, 102, 241, 0.25);
+            transform: translateY(-1px);
+        }
+
+        .btn-history-view:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .queue-position-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            background: rgba(139, 92, 246, 0.15);
+            border: 1px solid rgba(139, 92, 246, 0.3);
+            color: #c4b5fd;
+            font-size: 0.82rem;
+            font-weight: 600;
+            padding: 4px 12px;
+            border-radius: 8px;
+            margin-top: 6px;
+        }
+
+        @keyframes fadeInUp {
+            from { opacity: 0; transform: translateY(20px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
     </style>
 </head>
 
@@ -782,6 +1001,10 @@
                     <button id="btnDirectSearchExtract" class="btn btn-primary" onclick="searchAndExtract()"
                         style="background: linear-gradient(135deg, var(--secondary-accent) 0%, #0891b2 100%); margin-top: 20px;">
                         <i class="fas fa-download"></i> Search & Extract All
+                    </button>
+                    <button id="btnQueueAnother" class="btn" onclick="prepareNextSearch()"
+                        style="display:none; background: rgba(99,102,241,0.15); color: #c7d2fe; border: 1px solid rgba(99,102,241,0.4); margin-top: 20px; margin-left: 10px;">
+                        <i class="fas fa-plus"></i> Queue Another Search
                     </button>
                     <div id="searchStatus" style="margin-top: 15px;"></div>
                     <!-- Reference Number Badge (shown after search starts) -->
@@ -970,6 +1193,22 @@
             </div>
         </div>
 
+        <!-- ═══════ My Searches History Section ═══════ -->
+        <div class="search-history-card" id="searchHistorySection">
+            <div class="search-history-header">
+                <h3><i class="fas fa-clock-rotate-left"></i> My Searches</h3>
+                <button class="btn-clear-history" onclick="clearSearchHistory()" id="btnClearHistory" style="display:none;">
+                    <i class="fas fa-trash-alt"></i> Clear History
+                </button>
+            </div>
+            <div id="searchHistoryList">
+                <div class="history-empty">
+                    <i class="fas fa-inbox"></i>
+                    No searches yet. Use the search form above to get started.
+                </div>
+            </div>
+        </div>
+
         <script>
             let activeProfileData = null;
             let activeBulkData = null;
@@ -1056,6 +1295,7 @@
                         renderBulkProfiles(data.profiles, searchName);
                         showSearchSuccess(`Loaded ${data.profiles.length} profiles from cache.`);
                         if (data.reference_number) showRefBadge(data.reference_number);
+                        addToSearchHistory(searchName, data.reference_number, 'completed', {profiles_count: data.profiles.length});
                         btn.disabled = false;
                         btn.innerHTML = '<i class="fas fa-download"></i> Search &amp; Extract All';
 
@@ -1065,8 +1305,10 @@
                         if (taskId) showRefBadge(taskId);
                         showSearchInfo('<i class="fas fa-layer-group"></i> <strong>Queued in Task Bucket</strong> — the worker will process it automatically. Results will appear here when done.');
                         btn.innerHTML = '<i class="fas fa-clock"></i> Waiting in queue...';
+                        addToSearchHistory(searchName, taskId, 'queued');
                         if (currentPollInterval) clearInterval(currentPollInterval);
                         currentPollInterval = setInterval(() => pollScrapeStatus(searchName, btn, taskId), 4000);
+                        document.getElementById('btnQueueAnother').style.display = 'inline-block';
 
                     } else if (res.status === 202 && (data.status === 'pending' || data.status === 'in_progress')) {
                         // Already queued/running in bucket
@@ -1074,8 +1316,10 @@
                         if (taskId) showRefBadge(taskId);
                         showSearchInfo('<i class="fas fa-layer-group"></i> Already in Task Bucket — checking progress...');
                         btn.innerHTML = '<i class="fas fa-clock"></i> Processing...';
+                        addToSearchHistory(searchName, taskId, data.status);
                         if (currentPollInterval) clearInterval(currentPollInterval);
                         currentPollInterval = setInterval(() => pollScrapeStatus(searchName, btn, taskId), 4000);
+                        document.getElementById('btnQueueAnother').style.display = 'inline-block';
 
                     } else if (res.status === 401) {
                         showSearchError('<i class="fas fa-lock"></i> LinkedIn session not authenticated. Please contact the admin.');
@@ -1105,12 +1349,22 @@
                     const data = await res.json();
 
                     if (res.status === 202 && data.status === 'pending') {
-                        showSearchInfo('<i class="fas fa-clock"></i> <strong>Queued</strong> — waiting for the Task Bucket worker to start this task...');
-                        btn.innerHTML = '<i class="fas fa-clock"></i> Queued...';
+                        const pos = data.queue_position || '?';
+                        const total = data.queue_total || '?';
+                        let posHtml = '';
+                        if (pos > 1) {
+                            posHtml = `<br><span class="queue-position-badge"><i class="fas fa-layer-group"></i> Position ${pos} of ${total} in queue</span>`;
+                        } else {
+                            posHtml = `<br><span class="queue-position-badge"><i class="fas fa-layer-group"></i> Next in queue (${total} total)</span>`;
+                        }
+                        showSearchInfo(`<i class="fas fa-clock"></i> <strong>Queued</strong> — waiting for current task to finish...${posHtml}`);
+                        btn.innerHTML = `<i class="fas fa-clock"></i> Queue #${pos}`;
+                        updateSearchHistory(name, 'pending', taskId, {queue_position: pos, queue_total: total});
 
                     } else if (res.status === 202 && data.status === 'in_progress') {
                         showSearchInfo('<i class="fas fa-spinner spinner"></i> <strong>Scraping now</strong> — the worker is extracting LinkedIn profiles...');
                         btn.innerHTML = '<i class="fas fa-spinner spinner"></i> Scraping...';
+                        updateSearchHistory(name, 'in_progress', taskId);
 
                     } else if (res.status === 200 && data.status === 'completed') {
                         clearInterval(currentPollInterval);
@@ -1119,6 +1373,8 @@
                         showSearchSuccess(`✅ Done! ${data.profiles.length} profile(s) extracted successfully.`);
                         btn.disabled = false;
                         btn.innerHTML = '<i class="fas fa-download"></i> Search &amp; Extract All';
+                        document.getElementById('btnQueueAnother').style.display = 'none';
+                        updateSearchHistory(name, 'completed', taskId, {profiles_count: data.profiles.length});
 
                     } else if (data.status === 'failed') {
                         clearInterval(currentPollInterval);
@@ -1126,6 +1382,8 @@
                         showSearchError('❌ Scrape failed: ' + (data.error || 'Unknown error'));
                         btn.disabled = false;
                         btn.innerHTML = '<i class="fas fa-download"></i> Search &amp; Extract All';
+                        document.getElementById('btnQueueAnother').style.display = 'none';
+                        updateSearchHistory(name, 'failed', taskId, {error: data.error});
 
                     } else {
                         clearInterval(currentPollInterval);
@@ -1133,10 +1391,38 @@
                         showSearchError(data.error || 'Scrape failed or returned empty.');
                         btn.disabled = false;
                         btn.innerHTML = '<i class="fas fa-download"></i> Search &amp; Extract All';
+                        document.getElementById('btnQueueAnother').style.display = 'none';
+                        updateSearchHistory(name, 'failed', taskId);
                     }
                 } catch (e) {
                     console.error('Polling error', e);
                 }
+            }
+
+            function prepareNextSearch() {
+                // Clear the active UI poll so it stops updating the main area
+                if (currentPollInterval) {
+                    clearInterval(currentPollInterval);
+                    currentPollInterval = null;
+                }
+                
+                // Clear the inputs
+                document.getElementById('usernameKeyword').value = '';
+                document.getElementById('firstName').value = '';
+                document.getElementById('lastName').value = '';
+                document.getElementById('company').value = '';
+                
+                // Reset buttons
+                const btn = document.getElementById('btnDirectSearchExtract');
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fas fa-download"></i> Search &amp; Extract All';
+                document.getElementById('btnQueueAnother').style.display = 'none';
+                
+                // Clear the status text and ref badge
+                document.getElementById('searchStatus').innerHTML = '';
+                document.getElementById('refBadgeContainer').classList.remove('show');
+                
+                showSearchInfo('Ready to add another search to the queue! You can monitor the previous search progress in the "My Searches" section below.');
             }
 
             // ---- REFERENCE NUMBER LOOKUP ----
@@ -1183,10 +1469,11 @@
                             '<span style="font-size:0.85rem; opacity:0.85;">Please check the number and try again. ' +
                             'Reference numbers are case-sensitive.</span>'
                         );
-                    } else if (res.status === 202 && data.status === 'in_progress') {
+                    } else if (res.status === 202 && (data.status === 'in_progress' || data.status === 'pending')) {
+                        const statusLabel = data.status === 'pending' ? 'Queued' : 'Still scraping';
                         showRefPanel('in_progress',
-                            `<i class="fas fa-spinner spinner"></i> <strong>Still scraping...</strong>` +
-                            `<span style="font-size:0.85rem; opacity:0.85;">${escapeHtml(data.message || '')}</span>` +
+                            `<i class="fas fa-spinner spinner"></i> <strong>${statusLabel}...</strong><br>` +
+                            `<span style="font-size:0.85rem; opacity:0.85;">${escapeHtml(data.message || '')}</span><br>` +
                             `<span style="font-size:0.8rem; opacity:0.7;">Auto-checking every 5 seconds. Please wait.</span>`
                         );
                         // Auto-poll until done
@@ -1220,11 +1507,12 @@
                     });
                     const data = await res.json();
 
-                    if (res.status === 202 && data.status === 'in_progress') {
+                    if (res.status === 202 && (data.status === 'in_progress' || data.status === 'pending')) {
+                        const statusLabel = data.status === 'pending' ? 'Queued' : 'Still scraping';
                         // Still going — update message
                         showRefPanel('in_progress',
-                            `<i class="fas fa-spinner spinner"></i> <strong>Still scraping...</strong>` +
-                            `<span style="font-size:0.85rem; opacity:0.85;">${escapeHtml(data.message || '')}</span>` +
+                            `<i class="fas fa-spinner spinner"></i> <strong>${statusLabel}...</strong><br>` +
+                            `<span style="font-size:0.85rem; opacity:0.85;">${escapeHtml(data.message || '')}</span><br>` +
                             `<span style="font-size:0.8rem; opacity:0.7;">Auto-checking every 5 seconds. Please wait.</span>`
                         );
                     } else {
@@ -1584,18 +1872,24 @@
                 activeProfileData = null;
 
                 let extractedListHtml = '';
-                profiles.forEach(p => {
+                profiles.forEach((p, idx) => {
                     const initials = (p.name || '?').split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
                     const avatar = p.profile_picture
-                        ? `<img src="${escapeHtml(p.profile_picture)}" style="width:40px;height:40px;border-radius:50%;object-fit:cover;border:1px solid var(--secondary-accent);">`
-                        : `<div style="width:40px;height:40px;border-radius:50%;background:linear-gradient(135deg, var(--primary-accent), var(--secondary-accent));color:white;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:1rem;border:1px solid var(--secondary-accent);">${initials}</div>`;
+                        ? `<img src="${escapeHtml(p.profile_picture)}" style="width:45px;height:45px;border-radius:50%;object-fit:cover;border:1.5px solid var(--secondary-accent); flex-shrink:0;">`
+                        : `<div style="width:45px;height:45px;border-radius:50%;background:linear-gradient(135deg, var(--primary-accent), var(--secondary-accent));color:white;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:1rem;border:1.5px solid var(--secondary-accent);flex-shrink:0;">${initials}</div>`;
 
                     extractedListHtml += `
-                    <div style="display:flex; align-items:center; gap:15px; margin-bottom:10px; background: rgba(255,255,255,0.03); padding:10px; border-radius:8px;">
+                    <div class="bulk-profile-card" onclick="viewSingleProfileFromBulk('${escapeHtml(p.profile_url)}')" 
+                         style="display:flex; align-items:center; gap:15px; margin-bottom:12px; background: rgba(255,255,255,0.03); padding:12px; border-radius:10px; border:1px solid rgba(255,255,255,0.06); cursor:pointer; transition:all 0.2s;"
+                         onmouseover="this.style.background='rgba(255,255,255,0.08)'; this.style.borderColor='var(--secondary-accent)';" 
+                         onmouseout="this.style.background='rgba(255,255,255,0.03)'; this.style.borderColor='rgba(255,255,255,0.06)';">
                         ${avatar}
-                        <div style="text-align:left;">
-                            <div style="font-weight:bold; color:white; font-size:1rem;">${escapeHtml(p.name)}</div>
-                            ${p.headline ? `<div style="color:var(--text-muted); font-size:0.85rem;">${escapeHtml(p.headline)}</div>` : ''}
+                        <div style="text-align:left; flex-grow:1;">
+                            <div style="font-weight:bold; color:white; font-size:1rem; display:flex; justify-content:space-between; align-items:center; gap:10px;">
+                                <span>${escapeHtml(p.name)}</span>
+                                <span style="font-size:0.75rem; color:var(--secondary-accent); font-weight:normal; white-space:nowrap;"><i class="fas fa-chevron-right"></i> View Details</span>
+                            </div>
+                            ${p.headline ? `<div style="color:var(--text-muted); font-size:0.83rem; margin-top:2px;">${escapeHtml(p.headline)}</div>` : ''}
                         </div>
                     </div>
                 `;
@@ -1606,10 +1900,10 @@
                 <div style="padding: 30px 20px; text-align: center; color: white;">
                     <i class="fas fa-check-circle" style="color: #10b981; font-size: 3rem; margin-bottom: 15px;"></i>
                     <h3 style="font-size: 1.5rem; margin-bottom: 10px;">Scrape Complete for "${escapeHtml(searchName || 'Multi-Profile Search')}"</h3>
-                    <p style="color: var(--text-muted); font-size: 1.1rem; margin-bottom: 20px;">Successfully extracted ${profiles.length} profile${profiles.length === 1 ? '' : 's'}. Click the buttons above to download the complete data.</p>
+                    <p style="color: var(--text-muted); font-size: 1.1rem; margin-bottom: 20px;">Successfully extracted ${profiles.length} profile${profiles.length === 1 ? '' : 's'}. Click on any profile card below to view details, or use the download options.</p>
                     
-                    <div style="text-align:left; max-width: 600px; margin: 0 auto; background: rgba(0,0,0,0.2); border-radius:12px; padding:20px; border:1px solid rgba(255,255,255,0.05);">
-                        <h4 style="margin-top:0; margin-bottom:15px; color:#c7d2fe; border-bottom:1px solid rgba(255,255,255,0.1); padding-bottom:10px;">Extracted Profiles</h4>
+                    <div style="text-align:left; max-width: 650px; margin: 0 auto; background: rgba(0,0,0,0.2); border-radius:12px; padding:20px; border:1px solid rgba(255,255,255,0.05);">
+                        <h4 style="margin-top:0; margin-bottom:15px; color:#c7d2fe; border-bottom:1px solid rgba(255,255,255,0.1); padding-bottom:10px;">Extracted Profiles (Click to Expand Details)</h4>
                         ${extractedListHtml}
                     </div>
                 </div>
@@ -1617,6 +1911,15 @@
                 document.getElementById('bulkResult').style.display = 'block';
                 document.getElementById('bulkResult').scrollIntoView({ behavior: 'smooth' });
             }
+
+            window.viewSingleProfileFromBulk = function(profileUrl) {
+                const profiles = activeBulkData || window._refLookupProfiles || [];
+                const matched = profiles.find(p => p.profile_url === profileUrl);
+                if (matched) {
+                    renderProfile(matched);
+                }
+            };
+
 
             function toggleSection(sectionId, textId, value, isHtml) {
                 const section = document.getElementById(sectionId);
@@ -1733,6 +2036,252 @@
                     showSearchError('Bulk PDF export error: ' + e.message);
                 }
             }
+            // ════════════════════════════════════════════════════════════
+            // ██  MY SEARCHES — localStorage-based search history      ██
+            // ════════════════════════════════════════════════════════════
+
+            const HISTORY_KEY = 'persona_search_history';
+            const MAX_HISTORY = 50;
+
+            function getSearchHistory() {
+                try {
+                    return JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]');
+                } catch (e) { return []; }
+            }
+
+            function saveSearchHistory(history) {
+                localStorage.setItem(HISTORY_KEY, JSON.stringify(history.slice(0, MAX_HISTORY)));
+            }
+
+            function addToSearchHistory(name, refNumber, status, extra = {}) {
+                const history = getSearchHistory();
+                // Don't duplicate if same name+ref already exists
+                const existing = history.find(h => h.name === name && h.ref === refNumber);
+                if (existing) {
+                    existing.status = status;
+                    existing.updated_at = new Date().toISOString();
+                    Object.assign(existing, extra);
+                    saveSearchHistory(history);
+                    renderSearchHistory();
+                    return;
+                }
+                history.unshift({
+                    name,
+                    ref: refNumber,
+                    status,
+                    searched_at: new Date().toISOString(),
+                    updated_at: new Date().toISOString(),
+                    ...extra
+                });
+                saveSearchHistory(history);
+                renderSearchHistory();
+            }
+
+            function updateSearchHistory(name, status, refNumber, extra = {}) {
+                const history = getSearchHistory();
+                // Find by ref first, then by name
+                let entry = refNumber ? history.find(h => h.ref === refNumber) : null;
+                if (!entry) entry = history.find(h => h.name === name);
+                if (entry) {
+                    entry.status = status;
+                    entry.updated_at = new Date().toISOString();
+                    Object.assign(entry, extra);
+                    saveSearchHistory(history);
+                    renderSearchHistory();
+                }
+            }
+
+            function clearSearchHistory() {
+                localStorage.removeItem(HISTORY_KEY);
+                renderSearchHistory();
+            }
+
+            function renderSearchHistory() {
+                const history = getSearchHistory();
+                const container = document.getElementById('searchHistoryList');
+                const clearBtn = document.getElementById('btnClearHistory');
+
+                if (!history.length) {
+                    container.innerHTML = `
+                        <div class="history-empty">
+                            <i class="fas fa-inbox"></i>
+                            No searches yet. Use the search form above to get started.
+                        </div>
+                    `;
+                    clearBtn.style.display = 'none';
+                    return;
+                }
+
+                clearBtn.style.display = 'inline-flex';
+
+                const statusIcons = {
+                    completed: 'fa-check-circle',
+                    pending: 'fa-clock',
+                    queued: 'fa-clock',
+                    in_progress: 'fa-spinner spinner',
+                    failed: 'fa-times-circle'
+                };
+                const statusLabels = {
+                    completed: 'Completed',
+                    pending: 'In Queue',
+                    queued: 'In Queue',
+                    in_progress: 'Scraping',
+                    failed: 'Failed'
+                };
+
+                let html = '';
+                history.forEach((item, idx) => {
+                    const icon = statusIcons[item.status] || 'fa-question-circle';
+                    const label = statusLabels[item.status] || item.status;
+                    const statusClass = item.status === 'queued' ? 'pending' : item.status;
+                    const timeAgo = getTimeAgo(item.searched_at);
+                    const initials = (item.name || '?').split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
+
+                    const isViewable = item.status === 'completed';
+                    const isActive = item.status === 'pending' || item.status === 'queued' || item.status === 'in_progress';
+
+                    let actionBtn = '';
+                    if (isViewable) {
+                        actionBtn = `<button class="btn-history-view" onclick="viewHistoryResult(${idx})"><i class="fas fa-eye"></i> View</button>`;
+                    } else if (isActive) {
+                        const queueInfo = item.queue_position ? ` (#${item.queue_position})` : '';
+                        actionBtn = `<button class="btn-history-view" disabled><i class="fas fa-${icon}"></i> ${label}${queueInfo}</button>`;
+                    } else if (item.status === 'failed') {
+                        actionBtn = `<button class="btn-history-view" onclick="retryHistorySearch(${idx})"><i class="fas fa-redo"></i> Retry</button>`;
+                    }
+
+                    let queueBadge = '';
+                    if (isActive && item.queue_position && item.queue_position > 1) {
+                        queueBadge = `<span style="font-size:0.72rem; color:#c4b5fd;">Position ${item.queue_position} of ${item.queue_total || '?'}</span>`;
+                    }
+
+                    html += `
+                        <div class="history-item">
+                            <div class="history-item-icon ${statusClass}">
+                                <i class="fas ${icon}"></i>
+                            </div>
+                            <div class="history-item-details">
+                                <div class="history-item-name">${escapeHtml(item.name)}</div>
+                                <div class="history-item-meta">
+                                    <span class="history-status-badge ${statusClass}"><i class="fas ${icon}"></i> ${label}</span>
+                                    <span>${timeAgo}</span>
+                                    ${item.profiles_count ? `<span>${item.profiles_count} profile${item.profiles_count > 1 ? 's' : ''}</span>` : ''}
+                                    ${queueBadge}
+                                </div>
+                            </div>
+                            ${actionBtn}
+                        </div>
+                    `;
+                });
+
+                container.innerHTML = html;
+            }
+
+            function getTimeAgo(isoDate) {
+                if (!isoDate) return '';
+                const seconds = Math.floor((new Date() - new Date(isoDate)) / 1000);
+                if (seconds < 60) return 'just now';
+                const minutes = Math.floor(seconds / 60);
+                if (minutes < 60) return `${minutes}m ago`;
+                const hours = Math.floor(minutes / 60);
+                if (hours < 24) return `${hours}h ago`;
+                const days = Math.floor(hours / 24);
+                return `${days}d ago`;
+            }
+
+            async function viewHistoryResult(idx) {
+                const history = getSearchHistory();
+                const item = history[idx];
+                if (!item) return;
+
+                // Try to fetch by reference number first
+                const ref = item.ref;
+                if (ref && !ref.startsWith('cached_')) {
+                    try {
+                        const res = await fetch('/api/client/lookup-by-reference', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ reference_number: ref })
+                        });
+                        const data = await res.json();
+                        if (data.success && data.profiles && data.profiles.length) {
+                            renderBulkProfiles(data.profiles, item.name);
+                            document.getElementById('bulkResult').scrollIntoView({ behavior: 'smooth' });
+                            return;
+                        }
+                    } catch (e) { console.error('viewHistoryResult ref lookup error', e); }
+                }
+
+                // Fallback: fetch by name via scrape-status
+                try {
+                    const url = '/api/client/scrape-status?name=' + encodeURIComponent(item.name)
+                              + (ref ? '&task_id=' + encodeURIComponent(ref) : '');
+                    const res = await fetch(url);
+                    const data = await res.json();
+                    if (data.profiles && data.profiles.length) {
+                        renderBulkProfiles(data.profiles, item.name);
+                        document.getElementById('bulkResult').scrollIntoView({ behavior: 'smooth' });
+                    } else {
+                        showSearchError('No profiles found for this search. The data may have been cleared.');
+                    }
+                } catch (e) {
+                    showSearchError('Error loading results: ' + e.message);
+                }
+            }
+
+            async function retryHistorySearch(idx) {
+                const history = getSearchHistory();
+                const item = history[idx];
+                if (!item) return;
+
+                // Pre-fill the search fields and trigger search
+                const names = item.name.split(' ');
+                document.getElementById('firstName').value = names[0] || '';
+                document.getElementById('lastName').value = names.slice(1).join(' ') || '';
+                document.getElementById('usernameKeyword').value = '';
+                document.getElementById('company').value = '';
+
+                // Remove the failed entry
+                history.splice(idx, 1);
+                saveSearchHistory(history);
+                renderSearchHistory();
+
+                // Scroll up and trigger search
+                document.getElementById('tabDirectSearch').scrollIntoView({ behavior: 'smooth' });
+                searchAndExtract();
+            }
+
+            // ── Refresh active history items periodically ──
+            setInterval(() => {
+                const history = getSearchHistory();
+                const activeItems = history.filter(h => h.status === 'pending' || h.status === 'queued' || h.status === 'in_progress');
+                if (!activeItems.length) return;
+
+                activeItems.forEach(async (item) => {
+                    try {
+                        let url = '/api/client/scrape-status?name=' + encodeURIComponent(item.name);
+                        if (item.ref && !item.ref.startsWith('cached_')) {
+                            url = '/api/client/scrape-status?task_id=' + encodeURIComponent(item.ref) + '&name=' + encodeURIComponent(item.name);
+                        }
+                        const res = await fetch(url);
+                        const data = await res.json();
+
+                        if (data.status === 'completed' && data.profiles) {
+                            updateSearchHistory(item.name, 'completed', item.ref, {profiles_count: data.profiles.length});
+                        } else if (data.status === 'failed') {
+                            updateSearchHistory(item.name, 'failed', item.ref, {error: data.error});
+                        } else if (data.status === 'pending' || data.status === 'in_progress') {
+                            updateSearchHistory(item.name, data.status, item.ref, {
+                                queue_position: data.queue_position,
+                                queue_total: data.queue_total
+                            });
+                        }
+                    } catch (e) { /* ignore poll errors */ }
+                });
+            }, 6000);
+
+            // Render on page load
+            renderSearchHistory();
         </script>
 </body>
 
