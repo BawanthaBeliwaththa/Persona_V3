@@ -1,10 +1,19 @@
 #Required Imports
 import asyncio
 import re
+import sys
 from typing import Dict, List
 from datetime import datetime
 from playwright.async_api import async_playwright
 from pathlib import Path
+
+# Force stdout/stderr to be unbuffered so logs print in real-time on Windows
+try:
+    sys.stdout.reconfigure(line_buffering=True)
+    sys.stderr.reconfigure(line_buffering=True)
+except Exception:
+    pass
+
 
 # ── Global noise filter ────────────────────────────────────────────────────────
 # Lines that appear in LinkedIn's UI chrome, navigation, sidebars, and CTA
@@ -101,20 +110,169 @@ class LinkedInScraper:
         self.user_data_dir = Path(f"./browser_data/{session_name}")
         self.user_data_dir.mkdir(parents=True, exist_ok=True)
 
+    # ── Static helpers for lock cleanup ──────────────────────────────────────
+    _LOCK_PATTERNS = ['SingletonLock', 'SingletonCookie', 'SingletonSocket']
+    _DB_DIRS_WITH_LOCKS = [
+        'Default/Local Storage/leveldb',
+        'Default/Session Storage',
+        'Default/IndexedDB',
+        'Default/Sync Data/LevelDB',
+        'Default/Site Characteristics Database',
+        'Default/shared_proto_db',
+        'Default/shared_proto_db/metadata',
+        'Default/Extension State',
+        'Default/GCM Store',
+    ]
+
+    @staticmethod
+    def _kill_orphan_chromium(browser_data_marker: str = 'browser_data'):
+        """Force-kill any Chromium processes that were launched with our profile dir.
+        Must be called BEFORE _remove_locks so the files are no longer held open."""
+        import subprocess, sys
+        if sys.platform != 'win32':
+            return
+        try:
+            result = subprocess.run(
+                ['wmic', 'process', 'where',
+                 f"name='chrome.exe' and CommandLine like '%{browser_data_marker}%'",
+                 'get', 'ProcessId', '/FORMAT:CSV'],
+                capture_output=True, text=True, timeout=10
+            )
+            killed = 0
+            for line in result.stdout.splitlines():
+                parts = line.strip().split(',')
+                if len(parts) >= 2:
+                    try:
+                        pid = int(parts[-1].strip())
+                        subprocess.run(['taskkill', '/F', '/PID', str(pid)],
+                                       capture_output=True, timeout=5)
+                        killed += 1
+                        print(f"[init] Killed orphan Chromium PID {pid}")
+                    except (ValueError, Exception):
+                        pass
+            if killed:
+                import time
+                time.sleep(2)  # allow Windows to release file handles
+        except Exception as ex:
+            print(f"[init] _kill_orphan_chromium: {ex} (non-fatal)")
+
+    @staticmethod
+    def _remove_locks(base_dir: Path):
+        """Remove Singleton* and LevelDB LOCK files, plus residual Chrome caches."""
+        import shutil
+        # Singleton files at profile root
+        for pat in LinkedInScraper._LOCK_PATTERNS:
+            lock_file = base_dir / pat
+            if lock_file.exists():
+                try:
+                    lock_file.unlink()
+                    print(f"Removed stale lock: {lock_file}")
+                except Exception as ex:
+                    print(f"Could not remove {lock_file}: {ex}")
+        # LevelDB LOCK files inside subdirectories
+        for subdir in LinkedInScraper._DB_DIRS_WITH_LOCKS:
+            lock_file = base_dir / subdir / 'LOCK'
+            if lock_file.exists():
+                try:
+                    lock_file.unlink()
+                    print(f"Removed stale lock: {lock_file}")
+                except Exception as ex:
+                    print(f"Could not remove {lock_file}: {ex}")
+        # Residual Chrome downgrade delete markers & caches
+        for name in ('Snapshots.CHROME_DELETE', 'default.CHROME_DELETE', 'ShaderCache'):
+            item = base_dir / name
+            if item.exists():
+                try:
+                    if item.is_dir():
+                        shutil.rmtree(item, ignore_errors=True)
+                    else:
+                        item.unlink()
+                    print(f"Removed residual directory/file: {item}")
+                except Exception as ex:
+                    print(f"Could not remove residual {item}: {ex}")
+
     # Initialization and Login
     async def initialize(self):
         print("Initializing browser...")
         self.stats['start_time'] = datetime.now()
+
+        # ── Step 1: Kill any orphan Chromium processes FIRST so lock files become free ──
+        self._kill_orphan_chromium()
+
+        # ── Step 2: Remove stale lock files now that processes are dead ──
+        self._remove_locks(self.user_data_dir)
+
         self.playwright = await async_playwright().start()
-        self.context = await self.playwright.chromium.launch_persistent_context(
-            str(self.user_data_dir),
+
+        launch_kwargs = dict(
             headless=self.headless,
             viewport={'width': 1920, 'height': 1080},
-            user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36',
+            user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
+                       '(KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36',
             locale='en-US',
             timezone_id='America/New_York',
-            args=['--disable-blink-features=AutomationControlled']
+            args=[
+                '--disable-blink-features=AutomationControlled',
+                '--no-first-run',
+                '--no-default-browser-check',
+                '--disable-infobars',
+            ]
         )
+
+        # First attempt: persistent profile (preserves LinkedIn session/cookies)
+        try:
+            self.context = await self.playwright.chromium.launch_persistent_context(
+                str(self.user_data_dir),
+                **launch_kwargs
+            )
+        except Exception as e:
+            print(f"Persistent context launch failed: {e}. Attempting recovery...")
+            # ── Recovery: kill processes again, clean locks, wait, retry ──
+            await self.playwright.stop()
+            self.playwright = None
+            self._kill_orphan_chromium()
+            self._remove_locks(self.user_data_dir)
+            await asyncio.sleep(2)  # extra async wait for Windows handle release
+
+            self.playwright = await async_playwright().start()
+            try:
+                self.context = await self.playwright.chromium.launch_persistent_context(
+                    str(self.user_data_dir),
+                    **launch_kwargs
+                )
+                print("Recovery successful! Browser launched with existing profile.")
+            except Exception as retry_err:
+                print(f"Recovery launch failed: {retry_err}. Nuking profile for fresh start...")
+                await self.playwright.stop()
+                self.playwright = None
+
+                # ── Nuclear option: delete the entire profile and start fresh ──
+                import shutil
+                try:
+                    shutil.rmtree(self.user_data_dir, ignore_errors=True)
+                    self.user_data_dir.mkdir(parents=True, exist_ok=True)
+                    print("[init] Profile directory wiped. Starting with a fresh profile.")
+                except Exception as nuke_err:
+                    print(f"[init] Could not wipe profile: {nuke_err}")
+
+                await asyncio.sleep(1)
+                self.playwright = await async_playwright().start()
+                try:
+                    self.context = await self.playwright.chromium.launch_persistent_context(
+                        str(self.user_data_dir),
+                        **launch_kwargs
+                    )
+                    print("Fresh profile launch successful!")
+                except Exception as final_err:
+                    print(f"Final launch failed: {final_err}")
+                    await self.playwright.stop()
+                    self.playwright = None
+                    raise RuntimeError(
+                        "Browser could not launch after multiple recovery attempts. "
+                        "Please restart the application. "
+                        f"(Final error: {final_err})"
+                    )
+
         self.page = self.context.pages[0] if self.context.pages else await self.context.new_page()
         await self.context.add_init_script("""
             Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
@@ -122,14 +280,41 @@ class LinkedInScraper:
         """)
         await self.page.goto('https://www.linkedin.com/feed/', wait_until='domcontentloaded', timeout=30000)
         await asyncio.sleep(2)
-        if 'feed' in self.page.url:
+        base_url = self.page.url.split('?')[0].rstrip('/')
+        if 'feed' in base_url and 'login' not in base_url and 'checkpoint' not in base_url:
             self.is_authenticated = True
             print("User is already logged in")
         else:
+            self.is_authenticated = False
             print("Not logged in – please log in via UI")
         return self
 
+
+    async def check_auth(self) -> bool:
+        """Actively check if the current browser session is authenticated on LinkedIn."""
+        if not self.page or not self.context:
+            self.is_authenticated = False
+            return False
+        try:
+            base_url = self.page.url.split('?')[0].rstrip('/')
+            if 'feed' in base_url and 'login' not in base_url and 'checkpoint' not in base_url:
+                self.is_authenticated = True
+                return True
+            
+            await self.page.goto('https://www.linkedin.com/feed/', wait_until='domcontentloaded', timeout=15000)
+            await asyncio.sleep(1)
+            base_url = self.page.url.split('?')[0].rstrip('/')
+            if 'feed' in base_url and 'login' not in base_url and 'checkpoint' not in base_url:
+                self.is_authenticated = True
+                return True
+        except Exception:
+            pass
+        self.is_authenticated = False
+        return False
+
+
     # Login method (if not already authenticated)
+
     async def login(self, email: str, password: str) -> bool:
         if self.is_authenticated:
             return True
@@ -138,11 +323,23 @@ class LinkedInScraper:
         await self.page.fill('#username', email)
         await self.page.fill('#password', password)
         await self.page.click('button[type="submit"]')
-        await asyncio.sleep(5)
-        if 'feed' in self.page.url:
+        # Wait up to 120 seconds for feed redirect to support CAPTCHA or 2FA in visible window
+        print("Waiting for login redirect to feed (up to 120s for CAPTCHA/2FA)...")
+        for _ in range(60):
+            await asyncio.sleep(2)
+            base_url = self.page.url.split('?')[0].rstrip('/')
+            if 'feed' in base_url and 'login' not in base_url and 'checkpoint' not in base_url:
+                self.is_authenticated = True
+                print("Login successful (feed page loaded)!")
+                return True
+                
+        base_url = self.page.url.split('?')[0].rstrip('/')
+        if 'feed' in base_url and 'login' not in base_url and 'checkpoint' not in base_url:
             self.is_authenticated = True
             return True
+        print("Login timeout or failed.")
         return False
+
 
     # ── Core profile extraction ─────────────────────────────────────────────
     async def extract_profile(self, profile_url: str, _retry: int = 0) -> Dict:
@@ -214,7 +411,8 @@ class LinkedInScraper:
                     if (el && el.innerText.trim()) { data.location = el.innerText.trim(); break; }
                 }
                 // Profile picture
-                const imgEls = ['img.pv-top-card-profile-picture__image', 'img.presence-entity__image', 'img[src*="media.licdn.com"]'];
+                const imgEls = ['img.pv-top-card-profile-picture__image', '.pv-top-card-profile-picture img', '.pv-top-card__photo img', 'img[alt*="profile photo" i]', 'img[alt*="profile picture" i]', 'img[src*="licdn.com/dms/image/"]', 'img.presence-entity__image'];
+
                 for (const sel of imgEls) {
                     const el = document.querySelector(sel);
                     if (el && el.src) { data.profile_picture = el.src; break; }
@@ -968,8 +1166,13 @@ class LinkedInScraper:
         import urllib.parse
         encoded = urllib.parse.quote(query)
         url = f"https://www.linkedin.com/search/results/people/?keywords={encoded}"
-        await self.page.goto(url, wait_until='domcontentloaded')
+        try:
+            await self.page.goto(url, wait_until='domcontentloaded', timeout=60000)
+        except Exception as e:
+            print(f"Warning: Search page navigation timed out or encountered error: {e}. Attempting to parse elements anyway...")
+
         await asyncio.sleep(3)
+
         for _ in range(4):
             await self.page.evaluate('window.scrollBy(0, 800)')
             await asyncio.sleep(1)
@@ -1028,7 +1231,32 @@ class LinkedInScraper:
             }
             return res;
         }''')
-        return results[:max_results]
+        query_words = [w.lower() for w in (first_name + " " + last_name).split() if len(w) > 1]
+        filtered_results = []
+        for r in results:
+            name_lower = r.get('name', '').lower()
+            url_lower = r.get('profile_url', '').lower()
+            
+            # Filter out anonymous profiles
+            if not r.get('name') or r.get('name') in ('LinkedIn Member', 'LinkedIn User'):
+                continue
+                
+            # Filter by name keywords if query name is provided
+            if query_words:
+                match = False
+                for qw in query_words:
+                    if qw in ('sri', 'lanka', 'lankan', 'inc', 'corp', 'limited', 'co'):
+                        continue
+                    if qw in name_lower or qw in url_lower:
+                        match = True
+                        break
+                if not match:
+                    print(f"Skipping unrelated search result: {r.get('name')} ({r.get('profile_url')})")
+                    continue
+            filtered_results.append(r)
+            
+        return filtered_results[:max_results]
+
 
     async def search_and_extract(self, first_name: str, last_name: str, company: str = "") -> Dict:
         results = await self.search_people(first_name, last_name, company)
@@ -1048,8 +1276,24 @@ class LinkedInScraper:
         return {**self.stats, 'is_authenticated': self.is_authenticated}
 
     async def close(self):
+        """Gracefully close the browser and release all resources."""
+        self.is_authenticated = False
+        if self.page:
+            try:
+                await self.page.close()
+            except Exception:
+                pass
+            self.page = None
         if self.context:
-            await self.context.close()
+            try:
+                await self.context.close()
+            except Exception:
+                pass
+            self.context = None
         if self.playwright:
-            await self.playwright.stop()
-        print("Browser closed")
+            try:
+                await self.playwright.stop()
+            except Exception:
+                pass
+            self.playwright = None
+        print("Browser closed and resources released.")
