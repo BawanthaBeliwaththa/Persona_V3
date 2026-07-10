@@ -15,6 +15,14 @@ import time
 import requests
 import tempfile
 
+# Force stdout/stderr to be unbuffered so logs print in real-time on Windows
+try:
+    sys.stdout.reconfigure(line_buffering=True)
+    sys.stderr.reconfigure(line_buffering=True)
+except Exception:
+    pass
+
+
 # SSE subscriber queues for live admin updates
 _sse_subscribers: list = []
 _sse_lock = threading.Lock()
@@ -70,13 +78,20 @@ def admin_index():
 def init_scraper():
     global scraper
     try:
+        # 1. Gracefully close existing scraper if any
         if scraper:
             try:
                 run_async(scraper.close())
-            except:
+            except Exception:
                 pass
             scraper = None
+
+        # 2. Kill any orphan Playwright Chromium processes that are still holding
+        #    LOCK files on the browser_data directory.
+        _kill_playwright_chromium()
+
         data = request.json or {}
+
         async def init():
             global scraper
             scraper = LinkedInScraper(
@@ -85,13 +100,68 @@ def init_scraper():
                 session_name=data.get('session_name', 'default')
             )
             await scraper.initialize()
-            return {'success': True, 'message': 'Browser initialized'}
+            return {'success': True, 'message': 'Browser initialized successfully'}
+
         result = run_async(init())
         return jsonify(result)
     except Exception as e:
         import traceback
         traceback.print_exc()
+        scraper = None
         return jsonify({'success': False, 'error': str(e)}), 500
+
+
+def _kill_playwright_chromium():
+    """
+    Kill any Playwright-launched Chromium child processes that are still
+    alive after a previous session was not cleanly closed.
+    Only targets processes whose command line includes the browser_data path.
+    """
+    import subprocess
+    try:
+        # Use tasklist + wmic to find Chromium children tied to our profile dir
+        browser_data_marker = 'browser_data'
+        result = subprocess.run(
+            ['wmic', 'process', 'where',
+             f"name='chrome.exe' and CommandLine like '%{browser_data_marker}%'",
+             'get', 'ProcessId,CommandLine', '/FORMAT:CSV'],
+            capture_output=True, text=True, timeout=10
+        )
+        killed = 0
+        for line in result.stdout.splitlines():
+            parts = line.strip().split(',')
+            if len(parts) >= 2:
+                try:
+                    pid = int(parts[-1].strip())
+                    subprocess.run(['taskkill', '/F', '/PID', str(pid)],
+                                   capture_output=True, timeout=5)
+                    killed += 1
+                    print(f"Killed stale Chromium PID {pid}")
+                except Exception:
+                    pass
+        if killed:
+            import time
+            time.sleep(1)  # brief pause after kill
+    except Exception as ex:
+        print(f"_kill_playwright_chromium: {ex} (non-fatal, continuing)")
+
+
+@app.route('/api/scraper/kill-browser', methods=['POST'])
+def kill_browser():
+    """Emergency endpoint: forcefully close browser and kill any stale processes."""
+    global scraper
+    try:
+        if scraper:
+            try:
+                run_async(scraper.close())
+            except Exception:
+                pass
+            scraper = None
+        _kill_playwright_chromium()
+        return jsonify({'success': True, 'message': 'Browser processes terminated'})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
 
 # Scrapper Login
 @app.route('/api/scraper/login', methods=['POST'])
@@ -284,6 +354,484 @@ def rank_profiles():
         traceback.print_exc()
         return jsonify({'success': False, 'error': str(e)}), 500
 
+# -----------------------------------------------------------------------
+# Profile Data Cleaning Utilities
+# -----------------------------------------------------------------------
+
+def _clean_value(v):
+    """Return None if a value is null-like, otherwise return it as-is."""
+    if v is None:
+        return None
+    if isinstance(v, str):
+        stripped = v.strip()
+        if stripped.lower() in ('none', 'null', 'n/a', 'na', ''):
+            return None
+        return stripped
+    return v
+
+def _clean_list(lst):
+    """Remove null/empty items from a list; recursively clean dicts within it."""
+    if not lst or not isinstance(lst, list):
+        return []
+    result = []
+    for item in lst:
+        if isinstance(item, dict):
+            cleaned = clean_profile_dict(item)
+            if cleaned:
+                result.append(cleaned)
+        elif item is not None:
+            v = _clean_value(item)
+            if v is not None:
+                result.append(v)
+    return result
+
+def clean_profile_dict(d):
+    """Recursively remove null/empty keys from a dict."""
+    if not d or not isinstance(d, dict):
+        return {}
+    cleaned = {}
+    for k, v in d.items():
+        if isinstance(v, dict):
+            c = clean_profile_dict(v)
+            if c:
+                cleaned[k] = c
+        elif isinstance(v, list):
+            c = _clean_list(v)
+            if c:
+                cleaned[k] = c
+        else:
+            c = _clean_value(v)
+            if c is not None:
+                cleaned[k] = c
+    return cleaned
+
+# -----------------------------------------------------------------------
+# LinkedIn Scrape Junk Filter
+# LinkedIn pages include footer nav / language selector content that gets
+# mixed into every scraped section.  These constants identify that garbage.
+# -----------------------------------------------------------------------
+
+_LINKEDIN_FOOTER_TOKENS = {
+    'accessibility', 'talent solutions', 'community guidelines', 'careers',
+    'marketing solutions', 'privacy & terms', 'ad choices', 'advertising',
+    'sales solutions', 'mobile', 'small business', 'safety center',
+    'linkedin corporation', 'questions?', 'manage your account and privacy',
+    'go to your settings.', 'recommendation transparency',
+    'learn more about recommended content.', 'select language',
+    'visit our help center.', 'about',
+    # LinkedIn language names that appear in "select language" dropdown
+    'العربية (arabic)', 'বাংলা (bangla)', 'čeština (czech)', 'dansk (danish)',
+    'deutsch (german)', 'ελληνικά (greek)', 'english (english)',
+    'español (spanish)', 'فارسی (persian)', 'suomi (finnish)',
+    'français (french)', 'हिंदी (hindi)', 'magyar (hungarian)',
+    'bahasa indonesia (indonesian)', 'italiano (italian)', 'עברית (hebrew)',
+    '日本語 (japanese)', '한국어 (korean)', 'मराठी (marathi)',
+    'bahasa malaysia (malay)', 'nederlands (dutch)', 'norsk (norwegian)',
+    'ਪੰਜਾਬੀ (punjabi)', 'polski (polish)', 'português (portuguese)',
+    'română (romanian)', 'русский (russian)', 'svenska (swedish)',
+    'తెలుగు (telugu)', 'ภาษาไทย (thai)', 'tagalog (tagalog)',
+    'türkçe (turkish)', 'українська (ukrainian)', 'tiếng việt (vietnamese)',
+    '简体中文 (chinese (simplified))', '正體中文 (chinese (traditional))',
+    # Common garbage strings scraped from skills/project associations
+    'show credential', 'badge',
+}
+
+# Known real language names (to allow in the languages section)
+_REAL_LANGUAGE_NAMES = {
+    'english', 'sinhalese', 'sinhala', 'tamil', 'french', 'german',
+    'spanish', 'portuguese', 'italian', 'dutch', 'russian', 'chinese',
+    'japanese', 'korean', 'arabic', 'hindi', 'urdu', 'bengali',
+    'malay', 'indonesian', 'turkish', 'polish', 'swedish', 'norwegian',
+    'danish', 'finnish', 'greek', 'hebrew', 'thai', 'vietnamese',
+    'tagalog', 'punjabi', 'marathi', 'telugu', 'ukrainian', 'romanian',
+    'czech', 'hungarian', 'persian', 'farsi',
+}
+
+def _is_junk_text(text):
+    """Return True if the string is recognised LinkedIn footer/UI garbage."""
+    if not text:
+        return False
+    t = text.strip().lower()
+    if t in _LINKEDIN_FOOTER_TOKENS:
+        return True
+    if t.startswith('linkedin corporation'):
+        return True
+    if 'select language' in t:
+        return True
+    return False
+
+def _is_junk_entry(entry):
+    """Return True if a dict entry looks like scraped UI garbage, not real content."""
+    if not isinstance(entry, dict):
+        return False
+    values = [str(v).strip() for v in entry.values() if v]
+    if values and all(_is_junk_text(v) for v in values):
+        return True
+    for key in ('duration', 'date', 'dates'):
+        v = entry.get(key, '')
+        if v and _is_junk_text(str(v)):
+            return True
+    return False
+
+def _is_real_language(lang_name):
+    """True only if the name looks like a real human language, not a nav item."""
+    if not lang_name:
+        return False
+    t = lang_name.strip().lower()
+    if t in _REAL_LANGUAGE_NAMES:
+        return True
+    if _is_junk_text(t):
+        return False
+    junk_indicators = [
+        'solutions', 'guidelines', 'corporation', 'accessibility',
+        'advertising', 'privacy', 'terms', 'choices', 'credential',
+        'settings', 'transparency', 'center', 'questions', 'careers',
+    ]
+    for ind in junk_indicators:
+        if ind in t:
+            return False
+    return False
+
+def _clean_about(about_text):
+    """Strip the LinkedIn footer/language-selector content from the About field."""
+    if not about_text:
+        return ''
+    cutoff_markers = [
+        'Accessibility\nTalent Solutions',
+        '\nAccessibility\n',
+        'Talent Solutions\nCommunity Guidelines',
+        'Select language\n',
+        'LinkedIn Corporation',
+    ]
+    text = about_text
+    for marker in cutoff_markers:
+        idx = text.find(marker)
+        if idx > 0:
+            text = text[:idx].strip()
+    lines = text.split('\n')
+    clean_lines = [ln for ln in lines if ln.strip() and not _is_junk_text(ln.strip())]
+    return '\n'.join(clean_lines).strip()
+
+def _clean_experience_list(exp_list):
+    """Remove junk entries from experience; keep only real jobs."""
+    if not exp_list:
+        return []
+    result = []
+    seen = set()
+    for e in exp_list:
+        if not isinstance(e, dict):
+            continue
+        if _is_junk_entry(e):
+            continue
+        title   = (e.get('title') or '').strip()
+        company = (e.get('company') or '').strip()
+        if _is_junk_text(title) or _is_junk_text(company):
+            continue
+        if not title and not company:
+            continue
+        key = (title.lower(), company.lower())
+        if key in seen:
+            continue
+        seen.add(key)
+        result.append(e)
+    return result
+
+def _clean_education_list(edu_list):
+    """Remove junk entries from education/qualifications."""
+    if not edu_list:
+        return []
+    result = []
+    seen = set()
+    for e in edu_list:
+        if not isinstance(e, dict):
+            continue
+        if _is_junk_entry(e):
+            continue
+        inst   = (e.get('institution') or '').strip()
+        degree = (e.get('degree') or '').strip()
+        if _is_junk_text(inst) or _is_junk_text(degree):
+            continue
+        if not inst and not degree:
+            continue
+        if inst.lower().startswith('skills:') or degree.lower().startswith('skills:'):
+            continue
+        key = (inst.lower(), degree.lower())
+        if key in seen:
+            continue
+        seen.add(key)
+        result.append(e)
+    return result
+
+def _clean_certification_list(cert_list):
+    """Remove junk entries from certifications."""
+    if not cert_list:
+        return []
+    result = []
+    seen = set()
+    for c in cert_list:
+        if not isinstance(c, dict):
+            continue
+        if _is_junk_entry(c):
+            continue
+        name   = (c.get('name') or '').strip()
+        issuer = (c.get('issuer') or '').strip()
+        if _is_junk_text(name) or _is_junk_text(issuer):
+            continue
+        if name.lower() in ('show credential', 'badge', ''):
+            continue
+        if issuer.lower().startswith('skills:'):
+            continue
+        key = name.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        result.append(c)
+    return result
+
+def _clean_languages_list(lang_list):
+    """Keep only real human languages, discard footer-nav garbage."""
+    if not lang_list:
+        return []
+    result = []
+    seen = set()
+    for l in lang_list:
+        if not isinstance(l, dict):
+            continue
+        lang_name = (l.get('language') or '').strip()
+        if not lang_name:
+            continue
+        if not _is_real_language(lang_name):
+            continue
+        key = lang_name.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        result.append(l)
+    return result
+
+def _clean_honors_list(hon_list):
+    """Remove junk entries from honors/awards."""
+    if not hon_list:
+        return []
+    result = []
+    seen = set()
+    for h in hon_list:
+        if not isinstance(h, dict):
+            continue
+        if _is_junk_entry(h):
+            continue
+        title  = (h.get('title') or '').strip()
+        issuer = (h.get('issuer') or '').strip()
+        if _is_junk_text(title) or _is_junk_text(issuer):
+            continue
+        if not title:
+            continue
+        key = title.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        result.append(h)
+    return result
+
+def _clean_recommendations_list(rec_list):
+    """Remove junk entries from recommendations."""
+    if not rec_list:
+        return []
+    result = []
+    for r in rec_list:
+        if not isinstance(r, dict):
+            continue
+        if _is_junk_entry(r):
+            continue
+        recommender = (r.get('recommender') or '').strip()
+        text_val    = (r.get('text') or '').strip()
+        title       = (r.get('title') or '').strip()
+        if _is_junk_text(recommender) or _is_junk_text(title):
+            continue
+        if "haven't received" in recommender.lower() or 'try asking' in title.lower():
+            continue
+        if not recommender and not text_val:
+            continue
+        result.append(r)
+    return result
+
+def _clean_skills_list(skills_list):
+    """Deduplicate and remove junk from skills list."""
+    if not skills_list:
+        return []
+    seen = set()
+    result = []
+    for s in skills_list:
+        if isinstance(s, dict):
+            name = (s.get('skill') or s.get('name') or '').strip()
+        elif isinstance(s, str):
+            name = s.strip()
+        else:
+            continue
+        if not name:
+            continue
+        if _is_junk_text(name):
+            continue
+        # Filter out long project/job titles that sneaked into skills
+        if len(name) > 80:
+            continue
+        if ' at ' in name.lower() and 'intern' in name.lower():
+            continue
+        key = name.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        result.append({'skill': name})
+    return result
+
+def sanitize_profile(profile):
+    """
+    Deep-clean a raw scraped profile:
+    - Strips LinkedIn footer/nav junk from every section
+    - Removes null/empty values
+    - Deduplicates skills
+    - Cleans the About text
+    Returns a new dict with only real data.
+    """
+    if not profile or not isinstance(profile, dict):
+        return {}
+
+    p = dict(profile)
+
+    # Clean About field
+    p['about'] = _clean_about(p.get('about', '') or '')
+
+    # Clean list sections
+    p['experience']      = _clean_experience_list(p.get('experience') or p.get('experiences') or [])
+    p['experiences']     = p['experience']
+    p['qualifications']  = _clean_education_list(p.get('qualifications') or p.get('education') or [])
+    p['education']       = p['qualifications']
+    p['certifications']  = _clean_certification_list(p.get('certifications') or [])
+    p['languages']       = _clean_languages_list(p.get('languages') or [])
+    p['honors']          = _clean_honors_list(p.get('honors') or [])
+    p['recommendations'] = _clean_recommendations_list(p.get('recommendations') or [])
+    p['skills']          = _clean_skills_list(p.get('skills') or [])
+    p['volunteer']       = p.get('volunteer') or []
+
+    # Clean current_job
+    cj = p.get('current_job')
+    if cj and isinstance(cj, dict):
+        if _is_junk_entry(cj):
+            p['current_job'] = {}
+
+    # Remove empty string / null top-level fields
+    for field in ('name', 'headline', 'location', 'profile_url', 'profile_picture',
+                  'connections', 'scraped_at'):
+        v = p.get(field)
+        if v is not None and isinstance(v, str):
+            cleaned = v.strip()
+            if cleaned.lower() in ('none', 'null', 'n/a', 'na', ''):
+                p[field] = ''
+            else:
+                p[field] = cleaned
+
+    # Remove empty lists/dicts to keep JSON output clean
+    for k in list(p.keys()):
+        v = p[k]
+        if v == [] or v == {} or v == '':
+            if k not in ('name',):
+                del p[k]
+
+    return p
+
+# Keep backward-compatible alias
+def clean_profile(profile):
+    return sanitize_profile(profile)
+
+# -----------------------------------------------------------------------
+# CSV format helpers — convert nested data to human-readable strings
+# -----------------------------------------------------------------------
+
+def _format_experience_for_csv(exp_list):
+    """Turn experience list into a human-readable semicolon-separated string."""
+    if not exp_list:
+        return ''
+    parts = []
+    for e in exp_list:
+        if not isinstance(e, dict):
+            continue
+        title   = (e.get('title') or '').strip()
+        company = (e.get('company') or '').strip()
+        dur     = (e.get('duration') or '').strip()
+        pieces  = []
+        if title:   pieces.append(title)
+        if company: pieces.append(f'at {company}')
+        if dur:     pieces.append(f'({dur})')
+        if pieces:
+            parts.append(' '.join(pieces))
+    return '; '.join(parts)
+
+def _format_education_for_csv(edu_list):
+    """Turn education/qualifications list into a readable string."""
+    if not edu_list:
+        return ''
+    parts = []
+    for e in edu_list:
+        if not isinstance(e, dict):
+            continue
+        inst   = (e.get('institution') or '').strip()
+        degree = (e.get('degree') or '').strip()
+        dates  = (e.get('dates') or '').strip()
+        pieces = []
+        if inst:   pieces.append(inst)
+        if degree: pieces.append(degree)
+        if dates:  pieces.append(f'({dates})')
+        if pieces:
+            parts.append(' | '.join(pieces))
+    return '; '.join(parts)
+
+def _format_certifications_for_csv(cert_list):
+    """Turn certifications list into a readable string."""
+    if not cert_list:
+        return ''
+    parts = []
+    for c in cert_list:
+        if not isinstance(c, dict):
+            continue
+        name   = (c.get('name') or '').strip()
+        issuer = (c.get('issuer') or '').strip()
+        date   = (c.get('date') or '').strip()
+        pieces = []
+        if name:   pieces.append(name)
+        if issuer: pieces.append(f'by {issuer}')
+        if date:   pieces.append(f'({date})')
+        if pieces:
+            parts.append(' '.join(pieces))
+    return '; '.join(parts)
+
+def _format_skills_for_csv(skills_list):
+    """Turn skills list into a comma-separated readable string."""
+    if not skills_list:
+        return ''
+    parts = []
+    for s in skills_list:
+        if isinstance(s, dict):
+            name = (s.get('skill') or s.get('name') or '').strip()
+            if name:
+                parts.append(name)
+        elif isinstance(s, str):
+            s = s.strip()
+            if s:
+                parts.append(s)
+    return ', '.join(parts)
+
+def _format_current_job_for_csv(job):
+    """Turn current_job dict into a readable Title at Company string."""
+    if not job or not isinstance(job, dict):
+        return ''
+    title   = (job.get('title') or '').strip()
+    company = (job.get('company') or '').strip()
+    if title and company:
+        return f'{title} at {company}'
+    return title or company
+
+# -------------------------------------------------------------------------
+
 #Data Export Endpoint (Supports JSON and CSV)
 @app.route('/api/scraper/export', methods=['POST'])
 def export_data():
@@ -298,8 +846,15 @@ def export_data():
         if format_type == 'json':
             filename = f"linkedin_export_{timestamp}.json"
             filepath = Path("exports") / filename
+            # Clean profiles before saving — remove nulls and junk symbols
+            cleaned_payload = export_payload
+            if 'profiles' in export_payload:
+                cleaned_payload = {
+                    **export_payload,
+                    'profiles': [clean_profile(p) for p in (export_payload.get('profiles') or [])]
+                }
             with open(filepath, 'w', encoding='utf-8') as f:
-                json.dump(export_payload, f, indent=2, ensure_ascii=False)
+                json.dump(cleaned_payload, f, indent=2, ensure_ascii=False)
             return send_file(filepath, as_attachment=True, download_name=filename)
         elif format_type == 'csv':
             from flask import make_response
@@ -309,21 +864,28 @@ def export_data():
             profiles = export_payload.get('profiles', [])
             if not profiles:
                 return jsonify({'success': False, 'error': 'No profiles in data'}), 400
-            writer.writerow(['Name', 'Profile Picture', 'About', 'Job Title', 'Company', 'Qualifications', 'Certifications', 'Profile URL', 'Scraped At'])
+            # Human-readable column headers
+            writer.writerow([
+                'Name', 'Headline', 'Location',
+                'Current Position',
+                'Experience', 'Education / Qualifications',
+                'Skills', 'Certifications',
+                'About', 'Profile URL', 'Scraped At'
+            ])
             for p in profiles:
-                job = p.get('current_job', {}) or {}
-                quals = '; '.join([f"{q.get('institution','')} - {q.get('degree','')}" for q in (p.get('qualifications') or [])])
-                certs = '; '.join([f"{c.get('name','')} - {c.get('issuer','')}" for c in (p.get('certifications') or [])])
+                cp = clean_profile(p)
                 writer.writerow([
-                    p.get('name', ''),
-                    p.get('profile_picture', ''),
-                    (p.get('about', '') or '')[:2000],
-                    job.get('title', ''),
-                    job.get('company', ''),
-                    quals,
-                    certs,
-                    p.get('profile_url', ''),
-                    p.get('scraped_at', '')
+                    cp.get('name', ''),
+                    cp.get('headline', ''),
+                    cp.get('location', ''),
+                    _format_current_job_for_csv(cp.get('current_job')),
+                    _format_experience_for_csv(cp.get('experiences') or cp.get('experience')),
+                    _format_education_for_csv(cp.get('qualifications') or cp.get('education')),
+                    _format_skills_for_csv(cp.get('skills')),
+                    _format_certifications_for_csv(cp.get('certifications')),
+                    (cp.get('about') or '')[:2000],
+                    cp.get('profile_url', ''),
+                    cp.get('scraped_at', '')
                 ])
             output.seek(0)
             resp = make_response(output.getvalue())
@@ -417,29 +979,32 @@ def save_to_persistent_db(profile):
             with open(ALL_PROFILES_JSON, 'w', encoding='utf-8') as f:
                 json.dump(profiles, f, indent=2, ensure_ascii=False)
                 
-            # 2. Rewrite master CSV database
+            # 2. Rewrite master CSV database (human-readable columns)
             headers = [
-                'name', 'headline', 'location', 'profile_picture', 'about', 
-                'current_job', 'experience', 'qualifications', 'certifications', 
-                'profile_url', 'scraped_at'
+                'Name', 'Headline', 'Location',
+                'Current Position',
+                'Experience', 'Education / Qualifications',
+                'Skills', 'Certifications',
+                'About', 'Profile URL', 'Scraped At'
             ]
             
             with open(ALL_PROFILES_CSV, 'w', newline='', encoding='utf-8') as f:
                 writer = csv.writer(f)
                 writer.writerow(headers)
                 for p in profiles:
+                    cp = clean_profile(p)
                     writer.writerow([
-                        p.get('name', ''),
-                        p.get('headline', ''),
-                        p.get('location', ''),
-                        p.get('profile_picture', ''),
-                        p.get('about', ''),
-                        json.dumps(p.get('current_job', {})),
-                        json.dumps(p.get('experience', [])),
-                        json.dumps(p.get('qualifications', [])),
-                        json.dumps(p.get('certifications', [])),
-                        p.get('profile_url', ''),
-                        p.get('scraped_at', '')
+                        cp.get('name', ''),
+                        cp.get('headline', ''),
+                        cp.get('location', ''),
+                        _format_current_job_for_csv(cp.get('current_job')),
+                        _format_experience_for_csv(cp.get('experiences') or cp.get('experience')),
+                        _format_education_for_csv(cp.get('qualifications') or cp.get('education')),
+                        _format_skills_for_csv(cp.get('skills')),
+                        _format_certifications_for_csv(cp.get('certifications')),
+                        (cp.get('about') or '')[:2000],
+                        cp.get('profile_url', ''),
+                        cp.get('scraped_at', '')
                     ])
         except Exception as e:
             print(f"Error saving to master database: {e}")
@@ -503,31 +1068,34 @@ def create_job(return_code, profile_url, person_name=''):
             print(f"Error creating job: {e}")
 
 def save_scraped_data_formats(profile, return_code):
-    # Save JSON file
+    # Save cleaned JSON file (remove null values and junk symbols)
+    cp = clean_profile(profile)
     json_path = API_SCRAPES_DIR / f"{return_code}.json"
     with open(json_path, 'w', encoding='utf-8') as f:
-        json.dump(profile, f, indent=2, ensure_ascii=False)
+        json.dump(cp, f, indent=2, ensure_ascii=False)
         
-    # Save CSV file (headers matching JSON keys)
+    # Save CSV file with human-readable expanded columns
     csv_path = API_SCRAPES_DIR / f"{return_code}.csv"
     headers = [
-        'name', 'headline', 'location', 'profile_picture', 'about', 
-        'current_job', 'experience', 'qualifications', 'certifications', 
-        'profile_url', 'scraped_at', 'return_code'
+        'Name', 'Headline', 'Location',
+        'Current Position',
+        'Experience', 'Education / Qualifications',
+        'Skills', 'Certifications',
+        'About', 'Profile URL', 'Scraped At', 'Return Code'
     ]
     
     row_data = [
-        profile.get('name', ''),
-        profile.get('headline', ''),
-        profile.get('location', ''),
-        profile.get('profile_picture', ''),
-        profile.get('about', ''),
-        json.dumps(profile.get('current_job', {})),
-        json.dumps(profile.get('experience', [])),
-        json.dumps(profile.get('qualifications', [])),
-        json.dumps(profile.get('certifications', [])),
-        profile.get('profile_url', ''),
-        profile.get('scraped_at', ''),
+        cp.get('name', ''),
+        cp.get('headline', ''),
+        cp.get('location', ''),
+        _format_current_job_for_csv(cp.get('current_job')),
+        _format_experience_for_csv(cp.get('experiences') or cp.get('experience')),
+        _format_education_for_csv(cp.get('qualifications') or cp.get('education')),
+        _format_skills_for_csv(cp.get('skills')),
+        _format_certifications_for_csv(cp.get('certifications')),
+        (cp.get('about') or '')[:2000],
+        cp.get('profile_url', ''),
+        cp.get('scraped_at', ''),
         return_code
     ]
     
@@ -550,7 +1118,8 @@ async def perform_background_scrape(profile_url, return_code):
     try:
         if not scraper:
             print("Auto-initializing scraper for background API request...")
-            scraper = LinkedInScraper(headless=True, browser_type='chromium', session_name='default')
+            _kill_playwright_chromium()
+            scraper = LinkedInScraper(headless=False, browser_type='chromium', session_name='default')
             await scraper.initialize()
             
         profile = await scraper.extract_profile(profile_url)
@@ -580,7 +1149,8 @@ async def perform_background_scrape_by_name(person_name, return_code):
     try:
         if not scraper:
             print("Auto-initializing scraper for background name-based request...")
-            scraper = LinkedInScraper(headless=True, browser_type='chromium', session_name='default')
+            _kill_playwright_chromium()
+            scraper = LinkedInScraper(headless=False, browser_type='chromium', session_name='default')
             await scraper.initialize()
             
         if person_name.startswith('http'):
@@ -769,9 +1339,19 @@ def client_scrape_status():
     status = task['status']
 
     if status in ('pending', 'in_progress'):
+        # Compute queue position — how many pending/in_progress tasks are ahead
+        pending_or_active = [t for t in tasks if t['status'] in ('pending', 'in_progress')]
+        queue_total = len(pending_or_active)
+        queue_position = 0
+        for i, t in enumerate(pending_or_active):
+            if t['id'] == task.get('id'):
+                queue_position = i + 1
+                break
         return jsonify({
             'success': True,
             'status': status,
+            'queue_position': queue_position,
+            'queue_total': queue_total,
             'message': 'Queued in Task Bucket — the worker will process it automatically.' if status == 'pending'
                        else 'Currently scraping LinkedIn profiles…'
         }), 202
@@ -944,13 +1524,36 @@ def strip_emojis(text):
         "\u2000-\u32FF"
         "]+", flags=re.UNICODE
     )
-    return emoji_pattern.sub(r"", text)
+    return emoji_pattern.sub(r"", text).strip()
 
 def make_pdf_safe(text):
+    """Sanitise text for PDF output — returns empty string (not N/A) if blank."""
     if not text:
-        return "N/A"
-    clean = strip_emojis(text)
+        return ""
+    s = str(text)
+    replacements = {
+        '\u2014': ' - ',  # em-dash
+        '\u2013': '-',    # en-dash
+        '\u201c': '"',    # left double quote
+        '\u201d': '"',    # right double quote
+        '\u2018': "'",    # left single quote
+        '\u2019': "'",    # right single quote
+        '\u2022': '*',    # bullet point
+        '\xa0': ' ',      # non-breaking space
+    }
+    for orig, rep in replacements.items():
+        s = s.replace(orig, rep)
+        
+    clean = strip_emojis(s)
+    if clean.strip().lower() in ('none', 'null', 'n/a', 'na'):
+        return ""
     return clean.encode('latin-1', 'replace').decode('latin-1')
+
+
+def make_pdf_label(text, fallback='Unknown'):
+    """Like make_pdf_safe but uses a fallback for truly required fields."""
+    result = make_pdf_safe(text)
+    return result if result.strip() else fallback
 
 def download_profile_pic(url):
     try:
@@ -993,195 +1596,246 @@ class PDF(FPDF):
         self.set_text_color(128, 128, 128)
         self.cell(0, 10, f'Page {self.page_no()}', 0, 0, 'C')
 
+def _pdf_section_header(pdf, title):
+    """Draw a section header with a blue underline rule."""
+    pdf.set_font("Arial", 'B', 12)
+    pdf.set_text_color(10, 102, 194)
+    pdf.cell(0, 6, title, ln=True)
+    pdf.set_fill_color(10, 102, 194)
+    pdf.rect(15, pdf.get_y(), 180, 0.5, 'F')
+    pdf.ln(4)
+
 def build_profile_pdf(pdf, p):
+    # Clean profile first so no null values sneak through
+    p = clean_profile(p)
+
     image_path = None
-    if p.get('profile_picture'):
-        image_path = download_profile_pic(p['profile_picture'])
+    pic_url = p.get('profile_picture', '')
+    if pic_url and pic_url.startswith('http'):
+        image_path = download_profile_pic(pic_url)
         
     pdf.set_y(40)
     pdf.set_text_color(0, 0, 0)
     pdf.set_font("Arial", 'B', 16)
-    name_line = make_pdf_safe(p.get('name', 'Unknown Name'))
+    name_line = make_pdf_label(p.get('name', ''), fallback='Unknown Name')
     pdf.cell(130, 8, name_line, ln=True)
     
-    pdf.set_font("Arial", size=10)
-    pdf.set_text_color(80, 80, 80)
-    headline_line = make_pdf_safe(p.get('headline', 'N/A'))
-    pdf.multi_cell(130, 5, headline_line)
-    pdf.ln(2)
+    headline = make_pdf_safe(p.get('headline', ''))
+    if headline:
+        pdf.set_font("Arial", size=10)
+        pdf.set_text_color(80, 80, 80)
+        pdf.multi_cell(130, 5, headline)
+        pdf.ln(2)
     
-    location_line = make_pdf_safe(f"Location: {p.get('location', 'N/A')}")
-    pdf.cell(130, 5, location_line, ln=True)
+    location = make_pdf_safe(p.get('location', ''))
+    if location:
+        pdf.set_font("Arial", size=10)
+        pdf.set_text_color(80, 80, 80)
+        pdf.cell(130, 5, f"Location: {location}", ln=True)
     
-    url_line = make_pdf_safe(f"URL: {p.get('profile_url', 'N/A')}")
-    pdf.cell(130, 5, url_line, ln=True)
+    profile_url = make_pdf_safe(p.get('profile_url', ''))
+    if profile_url:
+        pdf.set_font("Arial", size=9)
+        pdf.set_text_color(10, 102, 194)
+        pdf.cell(130, 5, f"LinkedIn: {profile_url}", ln=True)
     
-    if p.get('connections'):
-        conn_line = make_pdf_safe(f"Connections: {p.get('connections')}")
-        pdf.cell(130, 5, conn_line, ln=True)
+    connections = make_pdf_safe(str(p.get('connections', '')))
+    if connections:
+        pdf.set_font("Arial", size=9)
+        pdf.set_text_color(80, 80, 80)
+        pdf.cell(130, 5, f"Connections: {connections}", ln=True)
         
-    pdf.ln(5)
+    pdf.ln(4)
     if image_path:
         try:
-            pdf.image(image_path, x=15, y=pdf.get_y(), w=40, h=40)
-            pdf.ln(45)
+            pdf.image(image_path, x=155, y=42, w=35, h=35)
         except Exception as e:
             print(f"Error embedding image: {e}")
             
     current_y = pdf.get_y()
-    if current_y < 85 and not image_path:
+    if current_y < 85:
         pdf.set_y(85)
     
     # --- ABOUT ---
-    if p.get('about'):
-        pdf.set_font("Arial", 'B', 12)
-        pdf.set_text_color(10, 102, 194)
-        pdf.cell(0, 6, "ABOUT", ln=True)
-        pdf.set_fill_color(10, 102, 194)
-        pdf.rect(15, pdf.get_y(), 180, 0.5, 'F')
-        pdf.ln(3)
-        
+    about_text = make_pdf_safe(p.get('about', ''))
+    if about_text:
+        _pdf_section_header(pdf, "ABOUT")
         pdf.set_font("Arial", size=10)
         pdf.set_text_color(30, 30, 30)
-        about_text = make_pdf_safe(p.get('about', ''))
         pdf.multi_cell(0, 5, about_text)
         pdf.ln(5)
         
-    # --- EXPERIENCE ---
-    exp_list = p.get('experiences', []) or p.get('experience', [])
-    if exp_list:
-        pdf.set_font("Arial", 'B', 12)
-        pdf.set_text_color(10, 102, 194)
-        pdf.cell(0, 6, "EXPERIENCE", ln=True)
-        pdf.set_fill_color(10, 102, 194)
-        pdf.rect(15, pdf.get_y(), 180, 0.5, 'F')
-        pdf.ln(3)
-        
-        for exp in exp_list:
+    # --- CURRENT POSITION ---
+    current_job = p.get('current_job')
+    if current_job and isinstance(current_job, dict):
+        job_title   = make_pdf_safe(current_job.get('title', ''))
+        job_company = make_pdf_safe(current_job.get('company', ''))
+        job_dur     = make_pdf_safe(current_job.get('duration', ''))
+        if job_title or job_company:
+            _pdf_section_header(pdf, "CURRENT POSITION")
             pdf.set_font("Arial", 'B', 10)
             pdf.set_text_color(0, 0, 0)
-            title = make_pdf_safe(exp.get('title', 'N/A'))
-            company = make_pdf_safe(exp.get('company', 'N/A'))
+            pos_line = f"{job_title} at {job_company}" if (job_title and job_company) else (job_title or job_company)
+            pdf.multi_cell(0, 5, pos_line)
+            if job_dur:
+                pdf.set_font("Arial", 'I', 9)
+                pdf.set_text_color(100, 100, 100)
+                pdf.cell(0, 5, job_dur, ln=True)
+            pdf.ln(4)
+
+    # --- EXPERIENCE ---
+    exp_list = p.get('experiences') or p.get('experience') or []
+    if exp_list:
+        _pdf_section_header(pdf, "EXPERIENCE")
+        for exp in exp_list:
+            if not isinstance(exp, dict):
+                continue
+            title    = make_pdf_safe(exp.get('title', ''))
+            company  = make_pdf_safe(exp.get('company', ''))
             duration = make_pdf_safe(exp.get('duration', ''))
-            loc = make_pdf_safe(exp.get('location', ''))
+            loc      = make_pdf_safe(exp.get('location', ''))
+            desc     = make_pdf_safe(exp.get('description', ''))
             
-            pdf.multi_cell(0, 5, f"{title} at {company}")
-            pdf.set_font("Arial", 'I', 9)
-            pdf.set_text_color(100, 100, 100)
-            pdf.cell(0, 5, f"{duration} | {loc}" if loc else duration, ln=True)
+            if not title and not company:
+                continue  # skip entirely empty entries
+            
+            pdf.set_font("Arial", 'B', 10)
+            pdf.set_text_color(0, 0, 0)
+            pos_line = f"{title} at {company}" if (title and company) else (title or company)
+            pdf.multi_cell(0, 5, pos_line)
+            
+            meta_parts = []
+            if duration: meta_parts.append(duration)
+            if loc:      meta_parts.append(loc)
+            if meta_parts:
+                pdf.set_font("Arial", 'I', 9)
+                pdf.set_text_color(100, 100, 100)
+                pdf.cell(0, 5, "  ".join(meta_parts), ln=True)
+            if desc:
+                pdf.set_font("Arial", size=9)
+                pdf.set_text_color(50, 50, 50)
+                pdf.multi_cell(0, 4, desc)
             pdf.ln(3)
         pdf.ln(2)
 
     # --- EDUCATION ---
-    edu_list = p.get('education', []) or p.get('qualifications', [])
+    edu_list = p.get('education') or p.get('qualifications') or []
     if edu_list:
-        pdf.set_font("Arial", 'B', 12)
-        pdf.set_text_color(10, 102, 194)
-        pdf.cell(0, 6, "EDUCATION / QUALIFICATIONS", ln=True)
-        pdf.set_fill_color(10, 102, 194)
-        pdf.rect(15, pdf.get_y(), 180, 0.5, 'F')
-        pdf.ln(3)
-        
+        _pdf_section_header(pdf, "EDUCATION & QUALIFICATIONS")
         for edu in edu_list:
+            if not isinstance(edu, dict):
+                continue
+            inst   = make_pdf_safe(edu.get('institution', ''))
+            degree = make_pdf_safe(edu.get('degree', ''))
+            dates  = make_pdf_safe(edu.get('dates', ''))
+            field  = make_pdf_safe(edu.get('field_of_study', ''))
+            
+            if not inst and not degree:
+                continue
+            
             pdf.set_font("Arial", 'B', 10)
             pdf.set_text_color(0, 0, 0)
-            inst = make_pdf_safe(edu.get('institution', 'N/A'))
-            deg = make_pdf_safe(edu.get('degree', 'N/A'))
-            dates = make_pdf_safe(edu.get('dates', ''))
-            
-            pdf.multi_cell(0, 5, f"{inst} - {deg}")
-            pdf.set_font("Arial", 'I', 9)
-            pdf.set_text_color(100, 100, 100)
-            pdf.cell(0, 5, dates, ln=True)
+            edu_line = f"{inst}" if inst else ''
+            if degree:
+                edu_line += f" - {degree}" if edu_line else degree
+
+            if field:
+                edu_line += f", {field}"
+            pdf.multi_cell(0, 5, edu_line)
+            if dates:
+                pdf.set_font("Arial", 'I', 9)
+                pdf.set_text_color(100, 100, 100)
+                pdf.cell(0, 5, dates, ln=True)
             pdf.ln(3)
         pdf.ln(2)
 
     # --- SKILLS ---
-    skills_list = p.get('skills', [])
+    skills_list = p.get('skills') or []
     if skills_list:
-        pdf.set_font("Arial", 'B', 12)
-        pdf.set_text_color(10, 102, 194)
-        pdf.cell(0, 6, "SKILLS", ln=True)
-        pdf.set_fill_color(10, 102, 194)
-        pdf.rect(15, pdf.get_y(), 180, 0.5, 'F')
-        pdf.ln(3)
-        
+        _pdf_section_header(pdf, "SKILLS")
         pdf.set_font("Arial", size=10)
         pdf.set_text_color(30, 30, 30)
         skills_formatted = []
         for s in skills_list:
             if isinstance(s, dict):
-                skill_name = s.get('skill', '')
-                ends = s.get('endorsements', '')
-                skills_formatted.append(f"{skill_name} ({ends})" if ends else skill_name)
-            else:
-                skills_formatted.append(str(s))
-        
-        pdf.multi_cell(0, 5, make_pdf_safe(", ".join(skills_formatted)))
+                skill_name = make_pdf_safe(s.get('skill') or s.get('name') or '')
+                ends       = make_pdf_safe(str(s.get('endorsements', '')))
+                if skill_name:
+                    skills_formatted.append(f"{skill_name} ({ends} endorsements)" if ends and ends != '0' else skill_name)
+            elif isinstance(s, str):
+                safe_s = make_pdf_safe(s)
+                if safe_s:
+                    skills_formatted.append(safe_s)
+        if skills_formatted:
+            pdf.multi_cell(0, 5, make_pdf_safe(", ".join(skills_formatted)))
         pdf.ln(5)
 
     # --- CERTIFICATIONS ---
-    cert_list = p.get('certifications', [])
+    cert_list = p.get('certifications') or []
     if cert_list:
-        pdf.set_font("Arial", 'B', 12)
-        pdf.set_text_color(10, 102, 194)
-        pdf.cell(0, 6, "CERTIFICATIONS", ln=True)
-        pdf.set_fill_color(10, 102, 194)
-        pdf.rect(15, pdf.get_y(), 180, 0.5, 'F')
-        pdf.ln(3)
-        
+        _pdf_section_header(pdf, "CERTIFICATIONS")
         for cert in cert_list:
+            if not isinstance(cert, dict):
+                continue
+            cname  = make_pdf_safe(cert.get('name', ''))
+            issuer = make_pdf_safe(cert.get('issuer', ''))
+            date   = make_pdf_safe(cert.get('date', ''))
+            
+            if not cname:
+                continue
+            
             pdf.set_font("Arial", 'B', 10)
             pdf.set_text_color(0, 0, 0)
-            cname = make_pdf_safe(cert.get('name', 'N/A'))
-            issuer = make_pdf_safe(cert.get('issuer', 'N/A'))
-            date = make_pdf_safe(cert.get('date', ''))
-            
-            pdf.cell(0, 5, f"{cname} - {issuer} ({date})", ln=True)
+            cert_line = cname
+            if issuer: cert_line += f" - {issuer}"
+
+            pdf.cell(0, 5, cert_line, ln=True)
+            if date:
+                pdf.set_font("Arial", 'I', 9)
+                pdf.set_text_color(100, 100, 100)
+                pdf.cell(0, 4, date, ln=True)
             pdf.ln(2)
         pdf.ln(2)
 
     # --- LANGUAGES ---
-    lang_list = p.get('languages', [])
+    lang_list = p.get('languages') or []
     if lang_list:
-        pdf.set_font("Arial", 'B', 12)
-        pdf.set_text_color(10, 102, 194)
-        pdf.cell(0, 6, "LANGUAGES", ln=True)
-        pdf.set_fill_color(10, 102, 194)
-        pdf.rect(15, pdf.get_y(), 180, 0.5, 'F')
-        pdf.ln(3)
-        
+        _pdf_section_header(pdf, "LANGUAGES")
         pdf.set_font("Arial", size=10)
         pdf.set_text_color(30, 30, 30)
         langs_formatted = []
         for l in lang_list:
             if isinstance(l, dict):
-                lang_name = l.get('language', '')
-                prof = l.get('proficiency', '')
-                langs_formatted.append(f"{lang_name} ({prof})" if prof else lang_name)
-            else:
-                langs_formatted.append(str(l))
-        pdf.multi_cell(0, 5, make_pdf_safe(", ".join(langs_formatted)))
+                lang_name = make_pdf_safe(l.get('language', ''))
+                prof      = make_pdf_safe(l.get('proficiency', ''))
+                if lang_name:
+                    langs_formatted.append(f"{lang_name} ({prof})" if prof else lang_name)
+            elif isinstance(l, str):
+                safe_l = make_pdf_safe(l)
+                if safe_l:
+                    langs_formatted.append(safe_l)
+        if langs_formatted:
+            pdf.multi_cell(0, 5, make_pdf_safe(", ".join(langs_formatted)))
         pdf.ln(5)
 
     # --- VOLUNTEER EXPERIENCE ---
-    vol_list = p.get('volunteer', [])
+    vol_list = p.get('volunteer') or []
     if vol_list:
-        pdf.set_font("Arial", 'B', 12)
-        pdf.set_text_color(10, 102, 194)
-        pdf.cell(0, 6, "VOLUNTEER EXPERIENCE", ln=True)
-        pdf.set_fill_color(10, 102, 194)
-        pdf.rect(15, pdf.get_y(), 180, 0.5, 'F')
-        pdf.ln(3)
-        
+        _pdf_section_header(pdf, "VOLUNTEER EXPERIENCE")
         for vol in vol_list:
+            if not isinstance(vol, dict):
+                continue
+            role = make_pdf_safe(vol.get('role', ''))
+            org  = make_pdf_safe(vol.get('organization', ''))
+            dur  = make_pdf_safe(vol.get('duration', ''))
+            
+            if not role and not org:
+                continue
+            
             pdf.set_font("Arial", 'B', 10)
             pdf.set_text_color(0, 0, 0)
-            role = make_pdf_safe(vol.get('role', 'N/A'))
-            org = make_pdf_safe(vol.get('organization', 'N/A'))
-            dur = make_pdf_safe(vol.get('duration', ''))
-            
-            pdf.multi_cell(0, 5, f"{role} at {org}")
+            vol_line = f"{role} at {org}" if (role and org) else (role or org)
+            pdf.multi_cell(0, 5, vol_line)
             if dur:
                 pdf.set_font("Arial", 'I', 9)
                 pdf.set_text_color(100, 100, 100)
@@ -1190,51 +1844,55 @@ def build_profile_pdf(pdf, p):
         pdf.ln(2)
 
     # --- HONORS & AWARDS ---
-    hon_list = p.get('honors', [])
+    hon_list = p.get('honors') or []
     if hon_list:
-        pdf.set_font("Arial", 'B', 12)
-        pdf.set_text_color(10, 102, 194)
-        pdf.cell(0, 6, "HONORS & AWARDS", ln=True)
-        pdf.set_fill_color(10, 102, 194)
-        pdf.rect(15, pdf.get_y(), 180, 0.5, 'F')
-        pdf.ln(3)
-        
+        _pdf_section_header(pdf, "HONORS & AWARDS")
         for hon in hon_list:
+            if not isinstance(hon, dict):
+                continue
+            title  = make_pdf_safe(hon.get('title', ''))
+            issuer = make_pdf_safe(hon.get('issuer', ''))
+            date   = make_pdf_safe(hon.get('date', ''))
+            
+            if not title:
+                continue
+            
             pdf.set_font("Arial", 'B', 10)
             pdf.set_text_color(0, 0, 0)
-            title = make_pdf_safe(hon.get('title', 'N/A'))
-            issuer = make_pdf_safe(hon.get('issuer', 'N/A'))
-            date = make_pdf_safe(hon.get('date', ''))
-            
-            pdf.multi_cell(0, 5, f"{title} - {issuer}" if issuer else title)
+            hon_line = f"{title} - {issuer}" if issuer else title
+
+            pdf.multi_cell(0, 5, hon_line)
             if date:
                 pdf.set_font("Arial", 'I', 9)
                 pdf.set_text_color(100, 100, 100)
-                pdf.cell(0, 5, date, ln=True)
+                pdf.cell(0, 4, date, ln=True)
             pdf.ln(3)
         pdf.ln(2)
 
     # --- RECOMMENDATIONS ---
-    rec_list = p.get('recommendations', [])
+    rec_list = p.get('recommendations') or []
     if rec_list:
-        pdf.set_font("Arial", 'B', 12)
-        pdf.set_text_color(10, 102, 194)
-        pdf.cell(0, 6, "RECOMMENDATIONS", ln=True)
-        pdf.set_fill_color(10, 102, 194)
-        pdf.rect(15, pdf.get_y(), 180, 0.5, 'F')
-        pdf.ln(3)
-        
+        _pdf_section_header(pdf, "RECOMMENDATIONS")
         for rec in rec_list:
+            if not isinstance(rec, dict):
+                continue
+            recommender = make_pdf_safe(rec.get('recommender', ''))
+            rec_title   = make_pdf_safe(rec.get('title', ''))
+            text_val    = make_pdf_safe(rec.get('text', ''))
+            
+            if not recommender and not text_val:
+                continue
+            
             pdf.set_font("Arial", 'B', 10)
             pdf.set_text_color(0, 0, 0)
-            recommender = make_pdf_safe(rec.get('recommender', 'N/A'))
-            title = make_pdf_safe(rec.get('title', 'N/A'))
-            text_val = make_pdf_safe(rec.get('text', 'N/A'))
-            
-            pdf.cell(0, 5, f"Recommender: {recommender} ({title})", ln=True)
-            pdf.set_font("Arial", 'I', 9)
-            pdf.set_text_color(50, 50, 50)
-            pdf.multi_cell(0, 4, text_val)
+            rec_header = recommender
+            if rec_title: rec_header += f" ({rec_title})"
+            if rec_header:
+                pdf.cell(0, 5, rec_header, ln=True)
+            if text_val:
+                pdf.set_font("Arial", 'I', 9)
+                pdf.set_text_color(50, 50, 50)
+                pdf.multi_cell(0, 4, text_val)
             pdf.ln(3)
         pdf.ln(2)
 
@@ -1525,11 +2183,55 @@ def admin_scrape_requested_name():
                 data_store[request_id]['status'] = 'approved'
                 with open(APPROVALS_FILE, 'w', encoding='utf-8') as f:
                     json.dump(data_store, f, indent=2)
+
+        # Update in task bucket queue if present
+        tasks = _load_bucket_queue()
+        task_found = False
+        for t in tasks:
+            if t['id'] == request_id:
+                t['status'] = 'completed'
+                t['completed_at'] = scraped_at
+                t['result_name'] = profile.get('name', person_name)
+                t['result_url'] = profile_url
+                t['profiles_found'] = 1
+                t['error'] = None
+                task_found = True
+                break
+        if task_found:
+            _save_bucket_queue(tasks)
+            _broadcast_sse('bucket_update', {'task_id': request_id, 'status': 'completed', 'query': person_name})
+
+        # Save to name cache to link name -> URL mapping for lookup-by-name
+        client_name = person_name
+        with db_lock:
+            cache_data = {}
+            if NAME_CACHE_FILE.exists():
+                try:
+                    with open(NAME_CACHE_FILE, 'r', encoding='utf-8') as _f:
+                        cache_data = json.load(_f)
+                except Exception:
+                    pass
+            cache_data[client_name] = [profile_url]
+            with open(NAME_CACHE_FILE, 'w', encoding='utf-8') as _f:
+                json.dump(cache_data, _f, indent=2)
                     
         return jsonify({'success': True, 'profile': profile})
     except Exception as e:
         import traceback
         traceback.print_exc()
+        # Update in task bucket queue if present to failed
+        tasks = _load_bucket_queue()
+        task_found = False
+        for t in tasks:
+            if t['id'] == request_id:
+                t['status'] = 'failed'
+                t['completed_at'] = datetime.now().isoformat()
+                t['error'] = str(e)
+                task_found = True
+                break
+        if task_found:
+            _save_bucket_queue(tasks)
+            _broadcast_sse('bucket_update', {'task_id': request_id, 'status': 'failed', 'query': person_name})
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
@@ -1585,6 +2287,21 @@ def destroy_db():
                             f.unlink()
                         except Exception:
                             pass
+        # Clear name cache and task bucket queue
+        with db_lock:
+            if NAME_CACHE_FILE.exists():
+                try:
+                    with open(NAME_CACHE_FILE, 'w', encoding='utf-8') as f:
+                        f.write('{}')
+                except Exception:
+                    pass
+            if BUCKET_QUEUE_FILE.exists():
+                try:
+                    with open(BUCKET_QUEUE_FILE, 'w', encoding='utf-8') as f:
+                        f.write('[]')
+                except Exception:
+                    pass
+        _broadcast_sse('bucket_cleared', {})
         return jsonify({'success': True})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)})
@@ -1595,7 +2312,8 @@ async def perform_background_bulk_scrape(profile_urls, return_code):
     try:
         if not scraper:
             print("Auto-initializing scraper for background bulk API request...")
-            scraper = LinkedInScraper(headless=True, browser_type='chromium', session_name='default')
+            _kill_playwright_chromium()
+            scraper = LinkedInScraper(headless=False, browser_type='chromium', session_name='default')
             await scraper.initialize()
             
         scraped_profiles = []
@@ -1830,11 +2548,50 @@ def client_lookup_by_reference():
 
     jobs = get_jobs_data()
     if reference_number not in jobs:
+        tasks = _load_bucket_queue()
+        task = next((t for t in tasks if t['id'] == reference_number), None)
+        if task:
+            status = task.get('status', 'pending')
+            if status == 'completed':
+                json_path = API_SCRAPES_DIR / f"{reference_number}.json"
+                if json_path.exists():
+                    try:
+                        with open(json_path, 'r', encoding='utf-8') as f:
+                            bulk_data = json.load(f)
+                        profiles_list = bulk_data.get('profiles', [bulk_data]) if isinstance(bulk_data, dict) else bulk_data
+                        return jsonify({
+                            'success': True,
+                            'status': 'completed',
+                            'profiles': profiles_list,
+                            'total': len(profiles_list),
+                            'reference_number': reference_number
+                        })
+                    except Exception:
+                        pass
+            elif status == 'failed':
+                return jsonify({
+                    'success': False,
+                    'status': 'failed',
+                    'reference_number': reference_number,
+                    'person_name': task.get('query', ''),
+                    'error': task.get('error', 'The scrape job failed. Please contact the admin.')
+                }), 200
+                
+            return jsonify({
+                'success': False,
+                'status': status,
+                'reference_number': reference_number,
+                'person_name': task.get('query', ''),
+                'requested_at': task.get('added_at', ''),
+                'message': f"This search is currently '{status}' in the task bucket queue. Please wait."
+            }), 202
+
         return jsonify({
             'success': False,
             'error': 'No scrape request found for the provided reference number. '
                      'Please check the number and try again.'
         }), 404
+
 
     job = jobs[reference_number]
     status = job.get('status')
@@ -2069,11 +2826,27 @@ async def _bucket_worker():
             _broadcast_sse('bucket_update', {'task_id': task_id, 'status': 'in_progress', 'query': query})
 
             try:
-                # Auto-init scraper if needed
+
+                # Auto-init scraper if needed, or re-verify current session authentication
                 if not scraper:
-                    s = LinkedInScraper(headless=True, browser_type='chromium', session_name='default')
+                    _kill_playwright_chromium()  # clear orphan processes before launching
+                    s = LinkedInScraper(headless=False, browser_type='chromium', session_name='default')
                     await s.initialize()
                     scraper = s
+                else:
+                    is_ok = await scraper.check_auth()
+                    if not is_ok:
+                        print("[TaskBucket] Existing scraper session expired or browser disconnected. Re-initializing...")
+                        try:
+                            await scraper.close()
+                        except Exception:
+                            pass
+                        scraper = None
+                        _kill_playwright_chromium()  # clear orphan processes before re-launching
+                        s = LinkedInScraper(headless=False, browser_type='chromium', session_name='default')
+                        await s.initialize()
+                        scraper = s
+
 
                 if not scraper.is_authenticated:
                     raise ValueError("LinkedIn session not authenticated. Please log in via the admin dashboard first.")
@@ -2302,8 +3075,13 @@ async def _bucket_worker():
 
             # Rest period before next task
             cfg  = _load_bucket_config()
-            rest = int(cfg.get('rest_seconds', 30))
-            if rest > 0:
+            
+            import random
+            # Use configured rest_seconds as a base, but randomize it between 30 and 75 seconds
+            # to mimic human behavior and avoid rate limits.
+            base_rest = int(cfg.get('rest_seconds', 30))
+            if base_rest > 0:
+                rest = random.randint(max(30, base_rest), 75)
                 print(f"[TaskBucket] Resting {rest}s before next task…")
                 _broadcast_sse('bucket_rest', {'seconds': rest})
                 elapsed = 0
@@ -2325,6 +3103,7 @@ def _ensure_worker_running():
     """Start the bucket worker coroutine if it isn't already alive."""
     global _bucket_worker_running
     if not _bucket_worker_running:
+        _bucket_worker_running = True
         asyncio.run_coroutine_threadsafe(_bucket_worker(), _bg_loop)
 
 
