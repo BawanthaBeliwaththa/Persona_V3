@@ -373,7 +373,7 @@
     <div class="container">
         <div class="card">
             <h1><i class="fab fa-linkedin"></i> Persona - Linkedin Profile Extractor</h1>
-            <p>Extract every visible text from any LinkedIn profile</p>
+            <p>Extract every Detail from any LinkedIn profile</p>
         </div>
 
         <div class="card">
@@ -391,7 +391,7 @@
             <!-- Setup Tab -->
             <div id="setupTab" class="tab-content active">
                 <div class="form-grid">
-                    <div><label>LinkedIn Email</label><input type="email" id="email" placeholder="your@email.com"></div>
+                    <div><label>LinkedIn Email</label><input type="email" id="email" placeholder="bawantha@beliwaththa.web.lk"></div>
                     <div><label>LinkedIn Password</label><input type="password" id="password"></div>
                     <div><label>Session Name</label><input type="text" id="sessionName" value="default"></div>
                 </div>
@@ -433,7 +433,7 @@
                 </div>
 
                 <div class="form-grid">
-                    <div><label>Username (e.g., williamhgates)</label><input type="text" id="usernameKeyword" placeholder="LinkedIn username or full URL"></div>
+                    <div><label>Username (e.g., beliwaththa)</label><input type="text" id="usernameKeyword" placeholder="LinkedIn username or full URL"></div>
                     <div><label>First Name</label><input type="text" id="firstName" placeholder="First name"></div>
                     <div><label>Last Name</label><input type="text" id="lastName" placeholder="Last name"></div>
                     <div><label>Company (optional)</label><input type="text" id="company"></div>
@@ -443,6 +443,14 @@
                             <option value="5" selected>5</option>
                             <option value="10">10</option>
                         </select></div>
+                </div>
+
+                <div style="margin-top: 15px; border-top: 1px dashed #cbd5e1; padding-top: 15px;">
+                    <h4 style="color:#0a66c2; margin-bottom: 10px; font-size: 14px;"><i class="fas fa-id-card"></i> Contact Info Search (Premium Required)</h4>
+                    <div class="form-grid">
+                        <div><label>Email</label><input type="email" id="contactEmail" placeholder="bawantha@beliwaththa.web.lk"></div>
+                        <div><label>Phone</label><input type="text" id="contactPhone" placeholder="+94712345678"></div>
+                    </div>
                 </div>
                 <div class="btn-group">
                     <button class="btn btn-primary" onclick="addSearchToBucket()" id="btnSearchExtract" style="background:linear-gradient(135deg,#6366f1,#0a66c2);">
@@ -570,8 +578,25 @@
                         <span style="font-weight:400;color:#6b7280;"> — one per line, name or LinkedIn URL</span>
                     </label>
                     <textarea id="bucketTaskInput"
-                        placeholder="e.g.&#10;John Doe&#10;Jane Smith&#10;https://linkedin.com/in/williamhgates"></textarea>
-                    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px;gap:10px;flex-wrap:wrap;">
+                        placeholder="e.g.&#10;Bawantha Beliwaththa&#10;Yuvindu Lakshin&#10;https://linkedin.com/in/beliwaththa"></textarea>
+                    
+                    <div style="margin-top: 15px; padding-top: 15px; border-top: 1px dashed #cbd5e1;">
+                        <div style="display:flex; justify-content:space-between; align-items:center;">
+                            <label style="font-size:13px; font-weight: 600; color:#4b5563;">Bulk Upload (CSV or JSON)</label>
+                            <div style="font-size: 11px;">
+                                <a href="data:text/csv;charset=utf-8,query%0Ahttps://linkedin.com/in/beliwaththa%0ABawantha%20Beliwaththa" download="template.csv" style="color:#0a66c2; text-decoration: none; margin-right: 10px;"><i class="fas fa-file-csv"></i> CSV Template</a>
+                                <a href="data:application/json;charset=utf-8,%5B%0A%20%20%22https://linkedin.com/in/beliwaththa%22%2C%0A%20%20%22Bawantha%20Beliwaththa%22%0A%5D" download="template.json" style="color:#0a66c2; text-decoration: none;"><i class="fas fa-file-code"></i> JSON Template</a>
+                            </div>
+                        </div>
+                        <div style="display: flex; gap: 10px; margin-top: 5px;">
+                            <input type="file" id="bucketUploadFile" accept=".csv,.json" style="font-size: 13px;">
+                            <button class="btn btn-outline" onclick="bucketUploadFile()" style="padding:4px 10px;font-size:12px;">
+                                <i class="fas fa-upload"></i> Upload
+                            </button>
+                        </div>
+                    </div>
+
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:15px;gap:10px;flex-wrap:wrap;">
                         <span style="font-size:12px;color:#9ca3af;">Tip: mix names &amp; URLs — the system auto-detects each type.</span>
                         <button class="btn btn-primary" onclick="bucketAddTasks()" id="btnBucketAdd" style="padding:8px 18px;">
                             <i class="fas fa-paper-plane"></i> Add to Bucket
@@ -763,8 +788,50 @@ ${'='.repeat(80)}
 
             // Name-based: use username as firstName if provided
             if (username) { firstName = username; lastName = ''; }
+            
+            const contactEmail = document.getElementById('contactEmail').value.trim();
+            const contactPhone = document.getElementById('contactPhone').value.trim();
+
+            if (contactEmail || contactPhone) {
+                const btn = document.getElementById('btnSearchExtract');
+                btn.disabled = true;
+                btn.innerHTML = '<i class="fas fa-spinner spin"></i> Searching...';
+                try {
+                    const res = await fetch('/api/scraper/search-contact-info', {
+                        method: 'POST', headers: {'Content-Type':'application/json'},
+                        body: JSON.stringify({ email: contactEmail, phone: contactPhone })
+                    });
+                    const data = await res.json();
+                    if (res.status === 403 && data.error === 'PREMIUM_REQUIRED') {
+                        showAlert('searchStatus', `⚠️ ${data.message}`, 'warning');
+                    } else if (data.success) {
+                        showToast(`Found ${data.total} contact matches`, 'success');
+                        if (data.results && data.results.length > 0) {
+                            // Automatically add the first profile URL to bucket
+                            const url = data.results[0].profile_url;
+                            await fetch('/api/bucket/add', {
+                                method: 'POST', headers: {'Content-Type':'application/json'},
+                                body: JSON.stringify({ queries: [url] })
+                            });
+                            showAlert('searchStatus', '✅ Found contact and added to Task Bucket.', 'success');
+                            switchTab('bucket');
+                        } else {
+                            showAlert('searchStatus', 'No matches found for that contact info.', 'info');
+                        }
+                    } else {
+                        showAlert('searchStatus', 'Error: ' + data.error, 'error');
+                    }
+                } catch(e) {
+                    showAlert('searchStatus', 'Network error: ' + e.message, 'error');
+                } finally {
+                    btn.disabled = false;
+                    btn.innerHTML = '<i class="fas fa-layer-group"></i> Add to Task Bucket';
+                }
+                return;
+            }
+
             if (!firstName && !lastName) {
-                showAlert('searchStatus', 'Enter a name, username, or LinkedIn URL', 'warning');
+                showAlert('searchStatus', 'Enter a name, username, LinkedIn URL, or Contact Info', 'warning');
                 return;
             }
 
@@ -801,6 +868,36 @@ ${'='.repeat(80)}
         // Legacy direct-scrape (kept for internal admin use but not shown in UI)
         async function searchAndExtract() {
             return addSearchToBucket();
+        }
+
+        // Bulk Upload
+        async function bucketUploadFile() {
+            const fileInput = document.getElementById('bucketUploadFile');
+            if (!fileInput.files.length) {
+                showToast('Please select a file first', 'warning');
+                return;
+            }
+            const file = fileInput.files[0];
+            const formData = new FormData();
+            formData.append('file', file);
+            
+            showToast('Uploading file...', 'info');
+            try {
+                const res = await fetch('/api/bucket/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await res.json();
+                if (data.success) {
+                    showToast(data.message, 'success');
+                    fileInput.value = ''; // Reset input
+                    loadBucketStatus(); // Refresh bucket UI
+                } else {
+                    showToast('Upload error: ' + data.error, 'error');
+                }
+            } catch (e) {
+                showToast('Network error: ' + e.message, 'error');
+            }
         }
 
 
@@ -875,6 +972,20 @@ ${'='.repeat(80)}
                          </div>`;
                 html += `<div class="full-text-box" style="max-height:200px;">${escapeHtml(p.about)}</div>`;
                 html += `<pre class="section-json-box" id="aboutJson" style="display:none; background:#f3f4f6; border:1px solid #e5e7eb; padding:12px; border-radius:10px; font-family:monospace; font-size:12px; color:#1e1b4b; margin-top:10px; white-space:pre-wrap; overflow-x:auto;"></pre>`;
+            }
+
+            // Contact Info
+            if (p.contact_info && Object.keys(p.contact_info).length > 0) {
+                html += `<div class="section-title" style="display:flex; justify-content:space-between; align-items:center;">
+                            <span><i class="fas fa-address-book"></i> Contact Info</span>
+                            <button class="btn-json-toggle" onclick="toggleAdminSectionJson('contact_info', this)" style="background:rgba(10,102,194,0.1); border:1px solid rgba(10,102,194,0.3); color:#0a66c2; font-size:12px; cursor:pointer; font-weight:600; padding:2px 8px; border-radius:4px;"><i class="fas fa-code"></i> JSON</button>
+                         </div>`;
+                html += `<div style="background:#fefce8;padding:14px;border-radius:10px;border-left:4px solid #eab308;margin-bottom:12px;">`;
+                for (const [k, v] of Object.entries(p.contact_info)) {
+                    html += `<div style="margin-bottom:4px;"><strong style="text-transform:capitalize;">${escapeHtml(k)}:</strong> ${escapeHtml(v)}</div>`;
+                }
+                html += `</div>`;
+                html += `<pre class="section-json-box" id="contact_infoJson" style="display:none; background:#f3f4f6; border:1px solid #e5e7eb; padding:12px; border-radius:10px; font-family:monospace; font-size:12px; color:#1e1b4b; margin-top:10px; white-space:pre-wrap; overflow-x:auto;"></pre>`;
             }
 
             // Current Job
