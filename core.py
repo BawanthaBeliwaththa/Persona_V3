@@ -21,20 +21,31 @@ except Exception:
 _UI_NOISE = {
     # Navigation / chrome
     'LinkedIn', 'Home', 'My Network', 'Jobs', 'Messaging', 'Notifications',
-    'Search', 'Me', 'Work', 'Premium', 'Try Premium for free',
-    # Generic expand/collapse buttons
+    'Search', 'Me', 'Work', 'Premium', 'Try Premium for free', 'Try Premium for $0',
+    'Sales Navigator', 'Recruiter', 'Learning', 'Ad Choices', 'Advertising',
+    'Talent Solutions', 'Marketing Solutions', 'Sales Solutions', 'Small Business',
+    'Safety Center', 'Community Guidelines', 'Careers', 'Privacy & Terms',
+    'Accessibility', 'Help Center', 'Select language', 'LinkedIn Corporation',
+    'LinkedIn Corporation © 2026', 'LinkedIn Corporation © 2025',
+    # Generic expand/collapse & action buttons
     'Show all', 'Show more', 'See more', 'See less', 'Show less',
     'Show all experiences', 'Show all education', 'Show all skills',
     'Show all licenses & certifications', 'Show all honors & awards',
     'Show all volunteer experience', 'Show all recommendations',
-    'Show all languages', 'Add skills', 'Add languages',
-    'Show all 1 experience', 'Show all 1 education',
-    # Tab labels inside detail pages
-    'Received', 'Given', 'All', 'Top skills',
+    'Show all languages', 'Add skills', 'Add languages', 'Add profile section',
+    'Show all 1 experience', 'Show all 1 education', 'Show credential',
+    'More', 'Connect', 'Follow', 'Message', 'Saved', 'Save', 'Report', 'Block',
+    'Share via message', 'Share via...', 'Copy link to profile', 'Send message',
+    'Endorse', 'Endorsed', 'Verified', 'Verification', 'Verified member',
+    'Passed skill assessment', 'Top skill', 'Skill assessment',
+    # Tab labels inside detail pages & headers
+    'Received', 'Given', 'All', 'Top skills', 'About', 'Experience', 'Experiences',
+    'Education', 'Licenses & certifications', 'Certifications', 'Skills',
+    'Languages', 'Honors & awards', 'Volunteer experience', 'Recommendations',
+    'Interests', 'Causes', 'Groups', 'Newsletters',
     # Common sidebar / footer
     'People also viewed', 'People you may know', 'Suggested for you',
-    'More profiles for you', 'Activity', 'Interests', 'Following',
-    'Connect', 'Follow', 'Message', 'More', 'Report',
+    'More profiles for you', 'Activity', 'Following',
     # Misc UI
     'Open to', 'Open to work', 'Hiring', 'Pronouns',
     'Contact info', 'Company size', 'Industry', 'Employees',
@@ -45,15 +56,18 @@ _UI_NOISE = {
 
 # Patterns that indicate a line is UI noise (not profile data)
 _UI_NOISE_PATTERNS = [
-    re.compile(r'^\d+\s+connection', re.I),       # "500+ connections"
-    re.compile(r'^\d+\s+follower', re.I),          # "1,234 followers"
-    re.compile(r'^See all \d+', re.I),              # "See all 12 …"
-    re.compile(r'^Show all \d+', re.I),             # "Show all 5 …"
-    re.compile(r'^·\s+\d+\s+(yr|mo|week|day)', re.I),  # "· 2 yrs 3 mos"
+    re.compile(r'^\d+(\+)?\s+(connection|follower)', re.I),       # "500+ connections"
+    re.compile(r'^(See|Show|View)\s+all(\s+\d+)?', re.I),           # "See all 12 …"
+    re.compile(r'^Show\s+credential', re.I),
+    re.compile(r'^Endorsed\s+by', re.I),
+    re.compile(r'^\d+\s+endorsement', re.I),
+    re.compile(r'^Skill(s)?(\s+\d+)?$', re.I),
+    re.compile(r'^·\s+\d+\s+(yr|mo|week|day)', re.I),               # "· 2 yrs 3 mos"
     re.compile(r'^linkedin\.com', re.I),
     re.compile(r'^www\.linkedin\.com', re.I),
-    re.compile(r'^\s*\d+\s*$'),                    # lone digit (page numbers etc.)
+    re.compile(r'^\s*\d+\s*$'),                                    # lone digit (page numbers etc.)
     re.compile(r'^(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{4}$', re.I),  # bare dates
+    re.compile(r'^[•·\-\s]+$'),                                    # bullet/dash-only lines
 ]
 
 # Known proficiency keywords for languages
@@ -312,6 +326,77 @@ class LinkedInScraper:
         self.is_authenticated = False
         return False
 
+    async def is_premium_account(self) -> bool:
+        """Check if the logged-in account has a LinkedIn Premium subscription."""
+        if not await self.check_auth():
+            return False
+        try:
+            # Check the feed page for the 'Try Premium for free' link
+            # If it exists, they are not premium.
+            await self.page.goto('https://www.linkedin.com/feed/', wait_until='domcontentloaded', timeout=15000)
+            await asyncio.sleep(2)
+            is_free = await self.page.evaluate('''() => {
+                const links = Array.from(document.querySelectorAll('a'));
+                return links.some(a => a.innerText.toLowerCase().includes('try premium for free') || a.href.includes('/premium/'));
+            }''')
+            # Alternatively, look for a premium icon on the profile drop-down or navbar.
+            has_premium_icon = await self.page.evaluate('''() => {
+                return !!document.querySelector('li-icon[type="premium-brand"], svg.premium-icon, svg[data-supported-dps="24x24_premium_icon"]');
+            }''')
+            
+            # If we explicitly see "Try Premium for free", it's false.
+            if is_free:
+                return False
+            # Otherwise if we see the icon, it's true.
+            if has_premium_icon:
+                return True
+            # Fallback: assume false if we couldn't definitively tell
+            return False
+        except Exception as e:
+            print(f"Error checking premium status: {e}")
+            return False
+
+    async def search_by_contact_info(self, email: str = "", phone: str = "") -> List[Dict]:
+        """Search for a profile by email or phone (requires Premium/Sales Nav)."""
+        # We will attempt a general LinkedIn search using the email/phone as a keyword.
+        # This often works if the user has Premium or if the profile is highly visible.
+        keyword = email if email else phone
+        if not keyword:
+            return []
+            
+        search_url = f"https://www.linkedin.com/search/results/people/?keywords={keyword}"
+        await self.page.goto(search_url, wait_until='domcontentloaded', timeout=30000)
+        await asyncio.sleep(3)
+        
+        # Scroll to load results
+        for _ in range(5):
+            await self.page.evaluate('window.scrollBy(0, 500)')
+            await asyncio.sleep(0.5)
+            
+        results = await self.page.evaluate('''() => {
+            const items = document.querySelectorAll('li.reusable-search__result-container');
+            const data = [];
+            for (const item of items) {
+                const link = item.querySelector('.app-aware-link');
+                const img = item.querySelector('img');
+                const title = item.querySelector('.entity-result__primary-subtitle');
+                const subtitle = item.querySelector('.entity-result__secondary-subtitle');
+                if (link && link.href && link.href.includes('/in/')) {
+                    let url = link.href.split('?')[0];
+                    data.push({
+                        profile_url: url,
+                        name: link.innerText.trim().split('\\n')[0],
+                        profile_picture: img ? img.src : '',
+                        headline: title ? title.innerText.trim() : '',
+                        location: subtitle ? subtitle.innerText.trim() : ''
+                    });
+                }
+            }
+            return data;
+        }''')
+        return results
+
+
 
     # Login method (if not already authenticated)
 
@@ -388,8 +473,8 @@ class LinkedInScraper:
             # Step 4: Extract basic info from main page DOM
             raw = await self.page.evaluate('''() => {
                 const data = {
-                    name: '', headline: '', location: '',
-                    profile_picture: '', connections: '',
+                    name: '', headline: '', tagline: '', location: '',
+                    profile_picture: '', connections: '', followers: '',
                     page_title: document.title || ''
                 };
                 // Name
@@ -398,11 +483,15 @@ class LinkedInScraper:
                     const el = document.querySelector(sel);
                     if (el && el.innerText.trim()) { data.name = el.innerText.trim(); break; }
                 }
-                // Headline
-                const hlEls = ['.text-body-medium', '.pv-text-details__left-panel .text-body-medium'];
+                // Headline / Tagline
+                const hlEls = ['.text-body-medium', '.pv-text-details__left-panel .text-body-medium', '.text-heading-medium'];
                 for (const sel of hlEls) {
                     const el = document.querySelector(sel);
-                    if (el && el.innerText.trim()) { data.headline = el.innerText.trim(); break; }
+                    if (el && el.innerText.trim()) {
+                        data.headline = el.innerText.trim();
+                        data.tagline = el.innerText.trim();
+                        break;
+                    }
                 }
                 // Location
                 const locEls = ['.text-body-small.inline.t-black--light', '.pv-text-details__left-panel span.text-body-small'];
@@ -412,26 +501,36 @@ class LinkedInScraper:
                 }
                 // Profile picture
                 const imgEls = ['img.pv-top-card-profile-picture__image', '.pv-top-card-profile-picture img', '.pv-top-card__photo img', 'img[alt*="profile photo" i]', 'img[alt*="profile picture" i]', 'img[src*="licdn.com/dms/image/"]', 'img.presence-entity__image'];
-
                 for (const sel of imgEls) {
                     const el = document.querySelector(sel);
                     if (el && el.src) { data.profile_picture = el.src; break; }
                 }
-                // Connections/followers
-                const spans = document.querySelectorAll('span.t-bold');
-                for (const s of spans) {
-                    const txt = s.innerText.trim();
-                    if (/\\d/.test(txt) && /connection|follower/i.test(s.parentElement?.innerText || '')) {
-                        data.connections = s.parentElement.innerText.trim();
-                        break;
+                // Connections & Followers
+                const spanEls = document.querySelectorAll('span.t-bold, ul.pv-top-card--list-bullet li, li.text-body-small span, span');
+                for (const s of spanEls) {
+                    const txt = (s.innerText || '').trim();
+                    const pTxt = (s.parentElement?.innerText || s.innerText || '').trim();
+                    if (!data.connections && (/connection/i.test(pTxt) || /connection/i.test(txt))) {
+                        data.connections = pTxt || txt;
+                    }
+                    if (!data.followers && (/follower/i.test(pTxt) || /follower/i.test(txt))) {
+                        data.followers = pTxt || txt;
                     }
                 }
-                // About section — from the dedicated about div
+                // About section — click see more first
                 let aboutText = '';
-                const aboutDiv = document.querySelector('#about ~ div, section[data-section="about"] .display-flex span[aria-hidden="true"]');
-                if (aboutDiv) aboutText = aboutDiv.innerText.trim();
+                const aboutSec = document.querySelector('section[data-section="about"], #about ~ div, div[id="about"]');
+                if (aboutSec) {
+                    const btn = aboutSec.querySelector('button, .inline-show-more-text__button, span.see-more-button button');
+                    if (btn) { try { btn.click(); } catch(e) {} }
+                    const textSpans = aboutSec.querySelectorAll('.display-flex span[aria-hidden="true"], .pv-shared-text-with-see-more span');
+                    if (textSpans.length > 0) {
+                        aboutText = Array.from(textSpans).map(s => s.innerText.trim()).filter(t => t.length > 0).join('\\n');
+                    } else {
+                        aboutText = aboutSec.innerText.trim();
+                    }
+                }
                 if (!aboutText) {
-                    // Fallback: look for the "About" section heading and grab next sibling
                     const headings = document.querySelectorAll('h2, h3, div[id]');
                     for (const h of headings) {
                         if (h.innerText && h.innerText.trim() === 'About') {
@@ -456,6 +555,8 @@ class LinkedInScraper:
             # Step 5: Visit detail sub-pages
             base_url = profile_url.rstrip('/')
             detail_texts: Dict[str, str] = {}
+            contact_info: Dict[str, str] = {}
+            
             detail_pages = {
                 'experience':      f"{base_url}/details/experience/",
                 'education':       f"{base_url}/details/education/",
@@ -465,6 +566,7 @@ class LinkedInScraper:
                 'languages':       f"{base_url}/details/languages/",
                 'volunteer':       f"{base_url}/details/volunteering-experiences/",
                 'recommendations': f"{base_url}/details/recommendations/",
+                'contact_info':    f"{base_url}/overlay/contact-info/"
             }
             for section, url in detail_pages.items():
                 try:
@@ -521,7 +623,24 @@ class LinkedInScraper:
                         }
                         return "";
                     }''')
-                    if page_text and len(page_text) > 80:
+                    if section == 'contact_info':
+                        contact_data = await self.page.evaluate('''() => {
+                            const data = {};
+                            const sections = document.querySelectorAll('section.pv-contact-info__contact-type');
+                            for (const sec of sections) {
+                                const header = sec.querySelector('h3');
+                                if (!header) continue;
+                                const key = header.innerText.trim().toLowerCase();
+                                const vals = Array.from(sec.querySelectorAll('.pv-contact-info__ci-container, a, span.t-14, div.t-14')).map(el => el.innerText.trim()).filter(t => t.length > 0 && t !== header.innerText.trim());
+                                if (vals.length > 0) {
+                                    data[key] = Array.from(new Set(vals)).join(', ');
+                                }
+                            }
+                            return data;
+                        }''')
+                        if contact_data:
+                            contact_info = contact_data
+                    elif page_text and len(page_text) > 80:
                         detail_texts[section] = page_text
                 except:
                     pass
@@ -579,6 +698,7 @@ class LinkedInScraper:
                 'volunteer': volunteer,
                 'honors': honors,
                 'recommendations': recommendations,
+                'contact_info': contact_info,
                 'profile_url': profile_url,
                 'scraped_at': datetime.now().isoformat()
             }
@@ -593,8 +713,9 @@ class LinkedInScraper:
             if volunteer: found.append(f'{len(volunteer)} volunteer')
             if honors: found.append(f'{len(honors)} honors')
             if recommendations: found.append(f'{len(recommendations)} recs')
+            if contact_info: found.append('contact info')
             print(f"Success: Extracted: {name or 'Unknown'} | Found: {', '.join(found) or 'basic info only'}")
-            return result
+            return self.sanitize_profile(result)
 
         except Exception as e:
             err_msg = str(e)
@@ -609,12 +730,15 @@ class LinkedInScraper:
     # ── Text cleaning helpers ───────────────────────────────────────────────
 
     def _clean_lines(self, text: str) -> List[str]:
-        """Split text into lines, removing empty lines and known UI noise."""
+        """Split text into lines, removing empty lines, consecutive duplicates, and known UI noise."""
         result = []
+        last = None
         for line in text.split('\n'):
             s = line.strip()
             if s and not _is_noise(s):
-                result.append(s)
+                if s != last:
+                    result.append(s)
+                    last = s
         return result
 
     def _strip_posts(self, text: str) -> str:
@@ -663,8 +787,14 @@ class LinkedInScraper:
                 if s in end_markers:
                     break
                 if s and not _is_noise(s):
-                    captured.append(s)
-        return '\n'.join(captured).strip()
+                    s_clean = s.replace('… more', '').replace('...more', '').replace('more...', '').replace('…', '').strip()
+                    if s_clean and s_clean.lower() not in ('about', 'see more', 'show more'):
+                        captured.append(s_clean)
+        res = '\n'.join(captured).strip()
+        for junk in ['… more', '...more', '... more', '…more', 'more...', '... see more', 'see more', '…']:
+            if res.endswith(junk):
+                res = res[:-len(junk)].strip()
+        return res
 
     # ── Section parsers ─────────────────────────────────────────────────────
 
@@ -1268,6 +1398,78 @@ class LinkedInScraper:
             extracted.append(await self.extract_profile(r['profile_url']))
             await asyncio.sleep(5)
         return {'success': True, 'profiles_extracted': len(extracted), 'profiles': extracted}
+
+    def sanitize_profile(self, profile: Dict) -> Dict:
+        """
+        Deep-clean a raw scraped profile:
+        - Strips LinkedIn footer/nav junk from every section
+        - Removes null/empty values
+        - Deduplicates skills & languages
+        - Cleans the About text
+        Returns a new dict with only clean, usable section data.
+        """
+        if not profile or not isinstance(profile, dict):
+            return {}
+
+        p = dict(profile)
+
+        # Clean top-level fields
+        for field in ('name', 'headline', 'location', 'profile_url', 'profile_picture', 'connections'):
+            val = p.get(field)
+            if val and isinstance(val, str):
+                cleaned = val.strip()
+                if _is_noise(cleaned):
+                    p[field] = ''
+                else:
+                    p[field] = cleaned
+
+        # Clean list sections by purging entries with noise titles or missing names
+        if 'skills' in p and isinstance(p['skills'], list):
+            clean_s = []
+            seen = set()
+            for s in p['skills']:
+                name = s.get('skill', '') if isinstance(s, dict) else str(s)
+                name = name.strip()
+                if name and not _is_noise(name) and len(name) < 80 and name.lower() not in seen:
+                    seen.add(name.lower())
+                    clean_s.append({'skill': name})
+            p['skills'] = clean_s
+
+        if 'experiences' in p and isinstance(p['experiences'], list):
+            clean_e = []
+            for e in p['experiences']:
+                if isinstance(e, dict):
+                    t = (e.get('title') or '').strip()
+                    c = (e.get('company') or '').strip()
+                    if t and not _is_noise(t) and not _is_noise(c):
+                        clean_e.append(e)
+            p['experiences'] = clean_e
+
+        if 'qualifications' in p and isinstance(p['qualifications'], list):
+            clean_q = []
+            for q in p['qualifications']:
+                if isinstance(q, dict):
+                    inst = (q.get('institution') or '').strip()
+                    deg = (q.get('degree') or '').strip()
+        if 'volunteer' in p and isinstance(p['volunteer'], list):
+            clean_v = []
+            seen_v = set()
+            junk_v = ['questions?', 'privacy', 'transparency', 'help center', 'settings', 'recommended content', 'select language', 'mobile']
+            for v in p['volunteer']:
+                if isinstance(v, dict):
+                    role = (v.get('role') or '').strip()
+                    org = (v.get('organization') or v.get('company') or '').strip()
+                    if (role or org) and not _is_noise(role) and not _is_noise(org):
+                        r_low, o_low = role.lower(), org.lower()
+                        if not any(j in r_low or j in o_low for j in junk_v):
+                            if not ('(' in o_low and ')' in o_low):
+                                key = (r_low, o_low)
+                                if key not in seen_v:
+                                    seen_v.add(key)
+                                    clean_v.append(v)
+            p['volunteer'] = clean_v
+
+        return p
 
     # Stats and cleanup
     async def get_stats(self) -> Dict:
