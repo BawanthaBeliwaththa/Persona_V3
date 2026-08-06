@@ -129,9 +129,72 @@
             margin-bottom: 25px;
         }
 
-        @media (max-width: 600px) {
+        @media (max-width: 768px) {
+            body {
+                padding: 20px 12px;
+            }
+            .container {
+                max-width: 100%;
+            }
+            header {
+                margin-bottom: 25px;
+            }
+            header h1 {
+                font-size: 1.75rem;
+                flex-direction: column;
+                gap: 6px;
+            }
+            header p {
+                font-size: 0.95rem;
+            }
+            .glass-card {
+                padding: 20px 15px;
+                border-radius: 18px;
+                margin-bottom: 20px;
+            }
+            .tabs {
+                flex-wrap: wrap;
+                gap: 8px;
+            }
+            .tab-btn {
+                flex: 1 1 calc(50% - 6px);
+                text-align: center;
+                font-size: 0.9rem;
+                padding: 12px 10px;
+                min-height: 46px;
+            }
             .input-group-grid {
                 grid-template-columns: 1fr;
+                gap: 12px;
+            }
+            .input-field {
+                font-size: 1rem;
+                padding: 12px 14px;
+                min-height: 48px;
+            }
+            .btn {
+                padding: 14px;
+                min-height: 48px;
+                font-size: 1rem;
+            }
+            .profile-header {
+                flex-direction: column;
+                text-align: center;
+                align-items: center;
+            }
+            .profile-title-details h2 {
+                font-size: 1.4rem;
+            }
+            .avatar {
+                width: 75px;
+                height: 75px;
+                margin: 0 auto 10px;
+            }
+            .timeline-card {
+                padding: 12px;
+            }
+            .section-header {
+                font-size: 1.1rem;
             }
         }
 
@@ -982,7 +1045,7 @@
                 <h3 style="margin-bottom:20px;font-weight:700;">Direct LinkedIn Search & Extract</h3>
                 <div class="input-group-grid">
                     <div class="input-wrapper">
-                        <label>Username (e.g., williamhgates)</label>
+                        <label>Username (e.g., belwiaththa)</label>
                         <input type="text" id="usernameKeyword" class="input-field" placeholder="LinkedIn username">
                     </div>
                     <div class="input-wrapper">
@@ -996,6 +1059,32 @@
                     <div class="input-wrapper">
                         <label>Company (optional)</label>
                         <input type="text" id="company" class="input-field" placeholder="Company">
+                    </div>
+
+                    <div style="margin-top: 15px; border-top: 1px dashed rgba(255,255,255,0.2); padding-top: 15px; width: 100%; grid-column: 1 / -1;">
+                        <h4 style="color:var(--secondary-accent); margin-bottom: 10px; font-size: 0.95rem;"><i class="fas fa-id-card"></i> Contact Info Search (Premium Required)</h4>
+                        <div style="display:flex; gap:12px; flex-wrap:wrap;">
+                            <div class="input-wrapper" style="flex:1;">
+                                <label>Email</label>
+                                <input type="email" id="contactEmail" class="input-field" placeholder="bawantha@beliwaththa.web.lk">
+                            </div>
+                            <div class="input-wrapper" style="flex:1;">
+                                <label>Phone</label>
+                                <input type="text" id="contactPhone" class="input-field" placeholder="+94712345678">
+                            </div>
+                        </div>
+                    </div>
+                    <div style="margin-top: 15px; border-top: 1px dashed rgba(255,255,255,0.2); padding-top: 15px; width: 100%; grid-column: 1 / -1;">
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 10px;">
+                            <h4 style="color:var(--secondary-accent); margin: 0; font-size: 0.95rem;"><i class="fas fa-file-upload"></i> Bulk Upload Tasks (CSV or JSON)</h4>
+                            <div style="font-size: 11px;">
+                                <a href="data:text/csv;charset=utf-8,query%0Ahttps://linkedin.com/in/beliwaththa%0ABawantha%20Beliwaththa" download="template.csv" style="color:var(--secondary-accent); text-decoration: none; margin-right: 10px;"><i class="fas fa-file-csv"></i> CSV Template</a>
+                                <a href="data:application/json;charset=utf-8,%5B%0A%20%20%22https://linkedin.com/in/beliwaththa%22%2C%0A%20%20%22Bawantha%20Beliwaththa%22%0A%5D" download="template.json" style="color:var(--secondary-accent); text-decoration: none;"><i class="fas fa-file-code"></i> JSON Template</a>
+                            </div>
+                        </div>
+                        <div style="display:flex; gap:12px; align-items: center; flex-wrap:wrap;">
+                            <input type="file" id="clientUploadFile" accept=".csv,.json" class="input-field" style="flex:1; padding: 10px; background: rgba(0,0,0,0.2);">
+                        </div>
                     </div>
 
                     <button id="btnDirectSearchExtract" class="btn btn-primary" onclick="searchAndExtract()"
@@ -1268,14 +1357,79 @@
             }
 
             async function searchAndExtract() {
+                const fileInput = document.getElementById('clientUploadFile');
+                if (fileInput && fileInput.files.length > 0) {
+                    await clientUploadFile(true);
+                    return;
+                }
+
                 const username = document.getElementById('usernameKeyword').value.trim();
                 let firstName = document.getElementById('firstName').value.trim();
                 let lastName = document.getElementById('lastName').value.trim();
                 const company = document.getElementById('company').value.trim();
-                if (username) { firstName = username; lastName = ''; }
-                if (!firstName && !lastName) { showSearchError('Enter username or name'); return; }
-
+                const contactEmail = document.getElementById('contactEmail') ? document.getElementById('contactEmail').value.trim() : '';
+                const contactPhone = document.getElementById('contactPhone') ? document.getElementById('contactPhone').value.trim() : '';
+                
                 const btn = document.getElementById('btnDirectSearchExtract');
+
+                if (contactEmail || contactPhone) {
+                    btn.disabled = true;
+                    btn.innerHTML = '<i class="fas fa-spinner spinner"></i> Searching Contact...';
+                    showSearchInfo('<i class="fas fa-id-card"></i> Searching Contact Info (Requires Premium)...');
+
+                    try {
+                        const res = await fetch('/api/scraper/search-contact-info', {
+                            method: 'POST', headers: {'Content-Type':'application/json'},
+                            body: JSON.stringify({ email: contactEmail, phone: contactPhone })
+                        });
+                        const data = await res.json();
+                        if (res.status === 403 && data.error === 'PREMIUM_REQUIRED') {
+                            showSearchError(`⚠️ ${data.message}`);
+                        } else if (data.success) {
+                            if (data.results && data.results.length > 0) {
+                                const url = data.results[0].profile_url;
+                                const bRes = await fetch('/api/client/scrape', {
+                                    method: 'POST', headers: {'Content-Type':'application/json'},
+                                    body: JSON.stringify({ name: url }) // Queue the found URL
+                                });
+                                const bData = await bRes.json();
+                                if (bData.status === 'queued' || bData.status === 'pending' || bData.status === 'in_progress') {
+                                    const searchName = contactEmail || contactPhone;
+                                    showSearchInfo('<i class="fas fa-layer-group"></i> <strong>Found contact & Queued</strong> — waiting for results...');
+                                    addToSearchHistory(searchName, bData.reference_number, 'queued');
+                                    if (currentPollInterval) clearInterval(currentPollInterval);
+                                    currentPollInterval = setInterval(() => pollScrapeStatus(searchName, btn, bData.reference_number), 4000);
+                                    document.getElementById('btnQueueAnother').style.display = 'inline-block';
+                                } else if (bData.cached) {
+                                    const searchName = contactEmail || contactPhone;
+                                    renderBulkProfiles(bData.profiles, searchName);
+                                    showSearchSuccess(`Loaded contact profile from cache.`);
+                                    addToSearchHistory(searchName, bData.reference_number, 'completed', {profiles_count: bData.profiles.length});
+                                    btn.disabled = false;
+                                    btn.innerHTML = '<i class="fas fa-download"></i> Search &amp; Extract All';
+                                } else {
+                                    showSearchError('Error queuing found profile: ' + (bData.error || 'Unknown'));
+                                }
+                            } else {
+                                showSearchError('No matches found for that contact info.');
+                            }
+                        } else {
+                            showSearchError('Error: ' + data.error);
+                        }
+                    } catch (e) {
+                        showSearchError('Network error: ' + e.message);
+                    } finally {
+                        if (!currentPollInterval && btn.disabled && btn.innerHTML.includes('Searching')) {
+                            btn.disabled = false;
+                            btn.innerHTML = '<i class="fas fa-download"></i> Search &amp; Extract All';
+                        }
+                    }
+                    return;
+                }
+
+                if (username) { firstName = username; lastName = ''; }
+                if (!firstName && !lastName) { showSearchError('Please provide a Username, Name, Contact Info, OR upload a file to search.'); return; }
+
                 btn.disabled = true;
                 btn.innerHTML = '<i class="fas fa-spinner spinner"></i> Adding to queue...';
                 showSearchInfo('<i class="fas fa-layer-group"></i> Adding to Task Bucket queue...');
@@ -1335,6 +1489,44 @@
                     showSearchError('Error: ' + e.message);
                     btn.disabled = false;
                     btn.innerHTML = '<i class="fas fa-download"></i> Search &amp; Extract All';
+                }
+            }
+
+            async function clientUploadFile(isMainButton = false) {
+                const fileInput = document.getElementById('clientUploadFile');
+                if (!fileInput.files.length) {
+                    showSearchError('Please select a CSV or JSON file first.');
+                    return;
+                }
+                const file = fileInput.files[0];
+                const formData = new FormData();
+                formData.append('file', file);
+                
+                const btn = isMainButton ? document.getElementById('btnDirectSearchExtract') : document.getElementById('btnClientUpload');
+                if (!btn) return;
+                
+                btn.disabled = true;
+                const originalText = btn.innerHTML;
+                btn.innerHTML = '<i class="fas fa-spinner spinner"></i> Uploading...';
+                showSearchInfo('<i class="fas fa-upload"></i> Uploading file to task bucket...');
+
+                try {
+                    const res = await fetch('/api/bucket/upload', {
+                        method: 'POST',
+                        body: formData
+                    });
+                    const data = await res.json();
+                    if (data.success) {
+                        showSearchSuccess(`✅ ${data.message} They will be processed automatically.`);
+                        fileInput.value = ''; // Reset input
+                    } else {
+                        showSearchError('Upload error: ' + data.error);
+                    }
+                } catch (e) {
+                    showSearchError('Network error: ' + e.message);
+                } finally {
+                    btn.disabled = false;
+                    btn.innerHTML = originalText;
                 }
             }
 
@@ -1656,7 +1848,9 @@
                         const a = document.createElement('a');
                         a.href = url;
                         a.download = `persona_ref_results.${format}`;
+                        document.body.appendChild(a);
                         a.click();
+                        document.body.removeChild(a);
                         URL.revokeObjectURL(url);
                     } else {
                         const err = await res.json().catch(() => ({}));
@@ -1691,7 +1885,9 @@
                         const a = document.createElement('a');
                         a.href = url;
                         a.download = filename;
+                        document.body.appendChild(a);
                         a.click();
+                        document.body.removeChild(a);
                         URL.revokeObjectURL(url);
                     } else {
                         const err = await res.json().catch(() => ({}));
@@ -1745,13 +1941,17 @@
                     headerHtml += `<div class="avatar-fallback">${initials}</div>`;
                 }
 
+                const taglineText = profile.tagline || profile.headline || '';
                 headerHtml += `
                 <div class="profile-title-details">
                     <h2>${escapeHtml(profile.name || 'Unknown User')}</h2>
-                    ${profile.headline ? `<p class="headline">${escapeHtml(profile.headline)}</p>` : ''}
+                    ${taglineText ? `<p class="headline" style="color:#c7d2fe; font-size:1.05rem; margin-top:4px;"><i class="fas fa-quote-left" style="color:var(--secondary-accent); font-size:0.85rem; margin-right:5px;"></i> ${escapeHtml(taglineText)}</p>` : ''}
                     ${profile.location ? `<p class="location"><i class="fas fa-map-marker-alt" style="color:var(--secondary-accent);"></i> ${escapeHtml(profile.location)}</p>` : ''}
-                    ${profile.connections ? `<p style="color:var(--text-muted); font-size:0.85rem; margin-top:4px;"><i class="fas fa-users" style="color:var(--secondary-accent);"></i> ${escapeHtml(profile.connections)}</p>` : ''}
-                    <a href="${escapeHtml(profile.profile_url)}" target="_blank" style="color:var(--secondary-accent); font-size:0.85rem;"><i class="fab fa-linkedin"></i> View on LinkedIn</a>
+                    <div style="display:flex; gap:15px; flex-wrap:wrap; margin-top:6px; font-size:0.88rem; color:var(--text-muted);">
+                        ${profile.connections ? `<span><i class="fas fa-users" style="color:var(--secondary-accent);"></i> <strong>Connections:</strong> ${escapeHtml(profile.connections)}</span>` : ''}
+                        ${profile.followers ? `<span><i class="fas fa-user-plus" style="color:#10b981;"></i> <strong>Followers:</strong> ${escapeHtml(profile.followers)}</span>` : ''}
+                    </div>
+                    <a href="${escapeHtml(profile.profile_url)}" target="_blank" style="color:var(--secondary-accent); font-size:0.85rem; display:inline-block; margin-top:6px;"><i class="fab fa-linkedin"></i> View on LinkedIn</a>
                 </div>
             `;
                 header.innerHTML = headerHtml;
@@ -1760,21 +1960,36 @@
                 toggleSection('aboutSection', 'aboutText', profile.about, false);
                 toggleSection('fullTextSection', 'fullTextContent', profile.full_text, false);
 
+                // Contact Info 
+                // We'll dynamically inject this since there wasn't a placeholder container originally
+                let contactHtml = '';
+                if (profile.contact_info && Object.keys(profile.contact_info).length > 0) {
+                    contactHtml = `<div class="timeline-card" style="border-left-color: #eab308; background: rgba(234, 179, 8, 0.1);">`;
+                    for (const [k, v] of Object.entries(profile.contact_info)) {
+                        contactHtml += `<div style="margin-bottom:4px;"><strong style="text-transform:capitalize; color:#fde047;">${escapeHtml(k)}:</strong> ${escapeHtml(v)}</div>`;
+                    }
+                    contactHtml += `</div>`;
+                }
+
                 // Current Position
                 const currentJobSec = document.getElementById('currentJobSection');
                 const currentJobCont = document.getElementById('currentJobContainer');
-                if (profile.current_job && (profile.current_job.title || profile.current_job.company)) {
-                    let job = profile.current_job;
-                    currentJobCont.innerHTML = `
-                    <div class="timeline-card" style="border-left-color: var(--secondary-accent);">
-                        <h4>${escapeHtml(job.title)}</h4>
-                        <div class="company">${escapeHtml(job.company)}</div>
-                        <div class="meta">
-                            ${job.duration ? `<span><i class="far fa-clock"></i> ${escapeHtml(job.duration)}</span>` : ''}
-                            ${job.location ? `<span><i class="fas fa-map-marker-alt"></i> ${escapeHtml(job.location)}</span>` : ''}
+                if (contactHtml || (profile.current_job && (profile.current_job.title || profile.current_job.company))) {
+                    let jobHtml = contactHtml; 
+                    if (profile.current_job && (profile.current_job.title || profile.current_job.company)) {
+                        let job = profile.current_job;
+                        jobHtml += `
+                        <div class="timeline-card" style="border-left-color: var(--secondary-accent);">
+                            <h4>${escapeHtml(job.title)}</h4>
+                            <div class="company">${escapeHtml(job.company)}</div>
+                            <div class="meta">
+                                ${job.duration ? `<span><i class="far fa-clock"></i> ${escapeHtml(job.duration)}</span>` : ''}
+                                ${job.location ? `<span><i class="fas fa-map-marker-alt"></i> ${escapeHtml(job.location)}</span>` : ''}
+                            </div>
                         </div>
-                    </div>
-                `;
+                        `;
+                    }
+                    currentJobCont.innerHTML = jobHtml;
                     currentJobSec.style.display = 'block';
                 } else {
                     currentJobSec.style.display = 'none';
@@ -1845,7 +2060,10 @@
                         ${r.text ? `<p style="color:var(--text-main); margin-top:8px; font-style:italic; font-size:0.9rem;">&ldquo;${escapeHtml(r.text)}&rdquo;</p>` : ''}
                     </div>`).join('');
                     recSec.style.display = 'block';
-                } else { recSec.style.display = 'none'; }
+                } else {
+                    recCont.innerHTML = `<div class="timeline-card" style="border-left-color:#f59e0b; background:rgba(245,158,11,0.08); color:#fcd34d;"><i class="fas fa-info-circle"></i> None was received yet</div>`;
+                    recSec.style.display = 'block';
+                }
 
                 document.getElementById('profileResult').style.display = 'block';
                 document.getElementById('profileResult').scrollIntoView({ behavior: 'smooth' });
@@ -1971,7 +2189,9 @@
                         const a = document.createElement('a');
                         a.href = url;
                         a.download = `linkedin_export_${isBulk ? 'bulk' : 'profile'}.${format}`;
+                        document.body.appendChild(a);
                         a.click();
+                        document.body.removeChild(a);
                         URL.revokeObjectURL(url);
                     } else {
                         showSearchError('Export failed');
@@ -1997,7 +2217,9 @@
                         const a = document.createElement('a');
                         a.href = url;
                         a.download = `${(activeProfileData.name || 'profile').replace(/\s+/g, '_')}_profile.pdf`;
+                        document.body.appendChild(a);
                         a.click();
+                        document.body.removeChild(a);
                         URL.revokeObjectURL(url);
                         showSearchSuccess('PDF exported successfully.');
                     } else {
@@ -2025,7 +2247,9 @@
                         const a = document.createElement('a');
                         a.href = url;
                         a.download = `bulk_profiles_export.pdf`;
+                        document.body.appendChild(a);
                         a.click();
+                        document.body.removeChild(a);
                         URL.revokeObjectURL(url);
                         showSearchSuccess('Bulk PDF exported successfully.');
                     } else {
