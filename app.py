@@ -4,6 +4,7 @@ from flask_cors import CORS
 import asyncio
 import threading
 import os
+import io
 import sys
 import json
 from datetime import datetime
@@ -207,7 +208,33 @@ def search():
         traceback.print_exc()
         return jsonify({'success': False, 'error': str(e)}), 500
 
-
+@app.route('/api/scraper/search-contact-info', methods=['POST'])
+def search_contact_info():
+    global scraper
+    if not scraper or not scraper.is_authenticated:
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    try:
+        data = request.json
+        email = data.get('email', '').strip()
+        phone = data.get('phone', '').strip()
+        if not email and not phone:
+            return jsonify({'success': False, 'error': 'Email or phone required'}), 400
+            
+        async def do_search():
+            is_premium = await scraper.is_premium_account()
+            if not is_premium:
+                return {'success': False, 'error': 'PREMIUM_REQUIRED', 'message': 'System cannot search for contact info because a premium account is required to search contact info.'}
+            results = await scraper.search_by_contact_info(email, phone)
+            return {'success': True, 'results': results, 'total': len(results)}
+            
+        res = run_async(do_search())
+        if not res.get('success'):
+            return jsonify(res), 403 if res.get('error') == 'PREMIUM_REQUIRED' else 400
+        return jsonify(res)
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 #Combined search and extract
 @app.route('/api/scraper/search-and-extract', methods=['POST'])
@@ -493,7 +520,7 @@ def _is_real_language(lang_name):
     return False
 
 def _clean_about(about_text):
-    """Strip the LinkedIn footer/language-selector content from the About field."""
+    """Strip the LinkedIn footer/language-selector content and 'more...' artifacts from the About field."""
     if not about_text:
         return ''
     cutoff_markers = [
@@ -508,8 +535,22 @@ def _clean_about(about_text):
         idx = text.find(marker)
         if idx > 0:
             text = text[:idx].strip()
+
+    # Remove "...more" or "… more" or "more..." suffix/artifacts
+    for junk in ['… more', '...more', '... more', '…more', 'more...', '... see more', 'see more', '…']:
+        if text.endswith(junk):
+            text = text[:-len(junk)].strip()
+
     lines = text.split('\n')
-    clean_lines = [ln for ln in lines if ln.strip() and not _is_junk_text(ln.strip())]
+    clean_lines = []
+    for ln in lines:
+        s = ln.strip()
+        if not s or _is_junk_text(s):
+            continue
+        s = s.replace('… more', '').replace('...more', '').replace('more...', '').replace('…', '')
+        if s.lower() in ('about', 'see more', 'show more'):
+            continue
+        clean_lines.append(s)
     return '\n'.join(clean_lines).strip()
 
 def _clean_experience_list(exp_list):
@@ -684,6 +725,43 @@ def _clean_skills_list(skills_list):
         result.append({'skill': name})
     return result
 
+def _clean_volunteer_list(vol_list):
+    """Remove junk entries from volunteer experience (e.g. LinkedIn footer links & language pickers)."""
+    if not vol_list:
+        return []
+    result = []
+    seen = set()
+    junk_indicators = [
+        'questions?', 'manage your account', 'recommendation transparency',
+        'help center', 'settings', 'recommended content', 'select language',
+        'mobile', 'visit our help center.'
+    ]
+    for v in vol_list:
+        if not isinstance(v, dict):
+            continue
+        if _is_junk_entry(v):
+            continue
+        role = (v.get('role') or '').strip()
+        org  = (v.get('organization') or v.get('company') or '').strip()
+        if _is_junk_text(role) or _is_junk_text(org):
+            continue
+        if not role and not org:
+            continue
+        r_low = role.lower()
+        o_low = org.lower()
+        if any(ind in r_low or ind in o_low for ind in junk_indicators):
+            continue
+        if ('(' in o_low and ')' in o_low) or ('(' in r_low and ')' in r_low):
+            continue
+        if _is_real_language(org) or _is_real_language(role):
+            continue
+        key = (role.lower(), org.lower())
+        if key in seen:
+            continue
+        seen.add(key)
+        result.append(v)
+    return result
+
 def sanitize_profile(profile):
     """
     Deep-clean a raw scraped profile:
@@ -711,7 +789,8 @@ def sanitize_profile(profile):
     p['honors']          = _clean_honors_list(p.get('honors') or [])
     p['recommendations'] = _clean_recommendations_list(p.get('recommendations') or [])
     p['skills']          = _clean_skills_list(p.get('skills') or [])
-    p['volunteer']       = p.get('volunteer') or []
+    p['volunteer']       = _clean_volunteer_list(p.get('volunteer') or [])
+    p['contact_info']    = p.get('contact_info') or {}
 
     # Clean current_job
     cj = p.get('current_job')
@@ -1216,7 +1295,9 @@ def client_scrape():
     if not name:
         return jsonify({'success': False, 'error': 'name is required'}), 400
 
-    # --- Check cache first (instant return if already scraped) ---
+    name_lower = name.lower()
+
+    # --- Check cache first (instant return if already scraped, case-insensitive) ---
     with db_lock:
         cache_data = {}
         if NAME_CACHE_FILE.exists():
@@ -1226,8 +1307,9 @@ def client_scrape():
             except Exception:
                 pass
 
-    if name in cache_data:
-        cached_urls = cache_data[name]
+    matched_key = next((k for k in cache_data.keys() if k.lower() == name_lower), None)
+    if matched_key:
+        cached_urls = cache_data[matched_key]
         all_profiles = []
         if ALL_PROFILES_JSON.exists():
             try:
@@ -1235,18 +1317,18 @@ def client_scrape():
                     all_profiles = json.load(f)
             except Exception:
                 pass
-        results = [p for p in all_profiles if p.get('profile_url') in cached_urls]
+        results = [clean_profile(p) for p in all_profiles if p.get('profile_url') in cached_urls]
         if results:
             return jsonify({
                 'success': True, 'cached': True,
                 'profiles': results, 'total': len(results),
-                'reference_number': 'cached_' + name
+                'reference_number': 'cached_' + matched_key
             }), 200
 
-    # --- Check if this name is already in the bucket (pending or in_progress) ---
+    # --- Check if this name is already in the bucket (pending or in_progress, case-insensitive) ---
     existing_tasks = _load_bucket_queue()
     for t in existing_tasks:
-        if t.get('query') == name and t['status'] in ('pending', 'in_progress'):
+        if (t.get('query') or '').lower() == name_lower and t['status'] in ('pending', 'in_progress'):
             return jsonify({
                 'success': True, 'status': t['status'],
                 'reference_number': t['id'],
@@ -1293,7 +1375,7 @@ def client_scrape():
 def client_scrape_status():
     """
     Poll the bucket queue for a task by its id (reference_number) or by name.
-    Returns profiles from the master DB when the task is complete.
+    Returns profiles from the master DB when the task is complete. (100% Case-Insensitive)
     """
     task_id = request.args.get('task_id', '').strip()
     name    = request.args.get('name', '').strip()
@@ -1301,15 +1383,17 @@ def client_scrape_status():
     if not task_id and not name:
         return jsonify({'success': False, 'error': 'task_id or name is required'}), 400
 
+    task_id_lower = task_id.lower()
+    name_lower    = name.lower()
+
     tasks = _load_bucket_queue()
 
-    # Find by task_id first, then by name
+    # Case-insensitive search by task_id first, then by name
     task = None
     if task_id:
-        task = next((t for t in tasks if t['id'] == task_id), None)
+        task = next((t for t in tasks if t['id'].lower() == task_id_lower), None)
     if not task and name:
-        # Try _client_name field, then query
-        task = next((t for t in tasks if t.get('_client_name') == name or t.get('query') == name), None)
+        task = next((t for t in tasks if (t.get('_client_name') or t.get('query') or '').lower() == name_lower), None)
 
     if not task:
         # Maybe it already completed and was cleared from queue — check master DB
@@ -1320,7 +1404,7 @@ def client_scrape_status():
                     all_profiles = json.load(f)
             except Exception:
                 pass
-        # Check name cache
+        # Check name cache case-insensitively
         with db_lock:
             cache_data = {}
             if NAME_CACHE_FILE.exists():
@@ -1329,9 +1413,11 @@ def client_scrape_status():
                         cache_data = json.load(f)
                 except Exception:
                     pass
-        if name and name in cache_data:
-            cached_urls = cache_data[name]
-            results = [p for p in all_profiles if p.get('profile_url') in cached_urls]
+
+        matched_key = next((k for k in cache_data.keys() if k.lower() == name_lower), None) if name_lower else None
+        if matched_key:
+            cached_urls = cache_data[matched_key]
+            results = [clean_profile(p) for p in all_profiles if p.get('profile_url') in cached_urls]
             if results:
                 return jsonify({'success': True, 'status': 'completed', 'profiles': results, 'total': len(results)}), 200
         return jsonify({'success': False, 'error': 'Task not found'}), 404
@@ -1339,12 +1425,11 @@ def client_scrape_status():
     status = task['status']
 
     if status in ('pending', 'in_progress'):
-        # Compute queue position — how many pending/in_progress tasks are ahead
         pending_or_active = [t for t in tasks if t['status'] in ('pending', 'in_progress')]
         queue_total = len(pending_or_active)
         queue_position = 0
         for i, t in enumerate(pending_or_active):
-            if t['id'] == task.get('id'):
+            if t['id'].lower() == task.get('id', '').lower():
                 queue_position = i + 1
                 break
         return jsonify({
@@ -1374,7 +1459,6 @@ def client_scrape_status():
             except Exception:
                 pass
 
-        # Check name cache
         with db_lock:
             cache_data = {}
             if NAME_CACHE_FILE.exists():
@@ -1384,15 +1468,18 @@ def client_scrape_status():
                 except Exception:
                     pass
 
-        if search_name in cache_data:
-            cached_urls = cache_data[search_name]
-            results = [p for p in all_profiles if p.get('profile_url') in cached_urls]
+        search_lower = search_name.lower()
+        matched_key = next((k for k in cache_data.keys() if k.lower() == search_lower), None)
+        if matched_key:
+            cached_urls = cache_data[matched_key]
+            results = [clean_profile(p) for p in all_profiles if p.get('profile_url') in cached_urls]
             if results:
                 return jsonify({'success': True, 'status': 'completed', 'profiles': results, 'total': len(results)}), 200
 
-        # Fallback: return most recently scraped profiles whose name matches
-        results = [p for p in all_profiles if search_name.lower() in (p.get('name') or '').lower()]
+        # Fallback: return most recently scraped profiles whose name matches case-insensitively
+        results = [clean_profile(p) for p in all_profiles if search_lower in (p.get('name') or '').lower()]
         if results:
+            return jsonify({'success': True, 'status': 'completed', 'profiles': results, 'total': len(results)}), 200
             return jsonify({'success': True, 'status': 'completed', 'profiles': results[:10], 'total': len(results)}), 200
 
         return jsonify({
@@ -1644,6 +1731,12 @@ def build_profile_pdf(pdf, p):
         pdf.set_font("Arial", size=9)
         pdf.set_text_color(80, 80, 80)
         pdf.cell(130, 5, f"Connections: {connections}", ln=True)
+
+    followers = make_pdf_safe(str(p.get('followers', '')))
+    if followers:
+        pdf.set_font("Arial", size=9)
+        pdf.set_text_color(80, 80, 80)
+        pdf.cell(130, 5, f"Followers: {followers}", ln=True)
         
     pdf.ln(4)
     if image_path:
@@ -1871,8 +1964,8 @@ def build_profile_pdf(pdf, p):
 
     # --- RECOMMENDATIONS ---
     rec_list = p.get('recommendations') or []
+    _pdf_section_header(pdf, "RECOMMENDATIONS")
     if rec_list:
-        _pdf_section_header(pdf, "RECOMMENDATIONS")
         for rec in rec_list:
             if not isinstance(rec, dict):
                 continue
@@ -1895,6 +1988,11 @@ def build_profile_pdf(pdf, p):
                 pdf.multi_cell(0, 4, text_val)
             pdf.ln(3)
         pdf.ln(2)
+    else:
+        pdf.set_font("Arial", 'I', 10)
+        pdf.set_text_color(120, 120, 120)
+        pdf.cell(0, 6, "None was received yet", ln=True)
+        pdf.ln(4)
 
     if image_path and os.path.exists(image_path):
         try:
@@ -3157,6 +3255,83 @@ def bucket_add():
     _ensure_worker_running()
 
     return jsonify({'success': True, 'added': len(added), 'tasks': added}), 201
+
+
+@app.route('/api/bucket/upload', methods=['POST'])
+def bucket_upload():
+    """Upload a CSV or JSON file to add multiple tasks to the bucket queue."""
+    if 'file' not in request.files:
+        return jsonify({'success': False, 'error': 'No file part in the request'}), 400
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({'success': False, 'error': 'No file selected for uploading'}), 400
+
+    tasks_added = []
+    try:
+        if file.filename.endswith('.csv'):
+            stream = io.StringIO(file.stream.read().decode("UTF8"), newline=None)
+            csv_input = csv.reader(stream)
+            # Skip header if it looks like one, or just parse blindly
+            first_row = True
+            for row in csv_input:
+                if not row: continue
+                if first_row and row[0].strip().lower() in ['query', 'name', 'url', 'linkedin_url', 'profile']:
+                    first_row = False
+                    continue
+                first_row = False
+                query = row[0].strip()
+                if query:
+                    tasks_added.append(query)
+        elif file.filename.endswith('.json'):
+            json_data = json.loads(file.stream.read().decode("UTF8"))
+            if isinstance(json_data, list):
+                for item in json_data:
+                    if isinstance(item, dict) and 'query' in item:
+                        tasks_added.append(item['query'])
+                    elif isinstance(item, str):
+                        tasks_added.append(item)
+            elif isinstance(json_data, dict) and 'queries' in json_data:
+                tasks_added.extend(json_data['queries'])
+            else:
+                return jsonify({'success': False, 'error': 'Invalid JSON format. Expected a list of strings or {"queries": [...]}'}), 400
+        else:
+            return jsonify({'success': False, 'error': 'Allowed file types are csv, json'}), 400
+
+        if not tasks_added:
+            return jsonify({'success': False, 'error': 'No valid queries found in file'}), 400
+
+        # Add to bucket
+        tasks = _load_bucket_queue()
+        added = []
+        for q in tasks_added:
+            q = q.strip()
+            if not q: continue
+            detected_type = 'url' if q.startswith('http') else 'name'
+            task = {
+                'id': str(_uuid.uuid4()),
+                'query': q,
+                'type': detected_type,
+                'status': 'pending',
+                'added_at': datetime.now().isoformat(),
+                'started_at': None,
+                'completed_at': None,
+                'result_name': '',
+                'result_url': '',
+                'error': None,
+            }
+            tasks.append(task)
+            added.append(task)
+
+        _save_bucket_queue(tasks)
+        _broadcast_sse('bucket_tasks_added', {'count': len(added)})
+        _ensure_worker_running()
+        
+        return jsonify({'success': True, 'added': len(added), 'message': f'Successfully uploaded and queued {len(added)} tasks.'}), 201
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': f'Error processing file: {str(e)}'}), 500
 
 
 @app.route('/api/bucket/status', methods=['GET'])
