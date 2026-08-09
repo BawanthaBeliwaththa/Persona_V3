@@ -59,6 +59,14 @@ scraper = None
 _bg_loop: asyncio.AbstractEventLoop = asyncio.new_event_loop()
 threading.Thread(target=_bg_loop.run_forever, daemon=True, name="playwright-loop").start()
 
+_scrape_lock = None
+
+def _get_scrape_lock():
+    global _scrape_lock
+    if _scrape_lock is None:
+        _scrape_lock = asyncio.Lock()
+    return _scrape_lock
+
 # Helper function to run async coroutines in the background loop and wait for results
 def run_async(coro, timeout: int = 300):
     future = asyncio.run_coroutine_threadsafe(coro, _bg_loop)
@@ -296,28 +304,29 @@ def search_and_extract():
 
         # Run async in background loop without blocking
         async def background_search_and_extract():
-            try:
-                res = await scraper.search_and_extract(first_name=first_name, last_name=last_name, company=company)
-                if res.get('success'):
-                    profiles = res.get('profiles', [])
-                    scraped_urls = []
-                    for profile in profiles:
-                        if 'error' not in profile:
-                            save_to_persistent_db(profile)
-                            scraped_urls.append(profile.get('profile_url'))
-                    if scraped_urls:
-                        with db_lock:
-                            cache_data[name] = scraped_urls
-                            with open(NAME_CACHE_FILE, 'w', encoding='utf-8') as f:
-                                json.dump(cache_data, f, indent=2)
-                    _broadcast_sse('new_scrape', {'name': name, 'count': len(profiles)})
-                    update_job_status(request_id, 'completed', scraped_at=datetime.now().isoformat())
-                else:
-                    update_job_status(request_id, 'failed', error=res.get('error', 'Unknown error'))
-            except Exception as e:
-                import traceback
-                traceback.print_exc()
-                update_job_status(request_id, 'failed', error=str(e))
+            async with _get_scrape_lock():
+                try:
+                    res = await scraper.search_and_extract(first_name=first_name, last_name=last_name, company=company)
+                    if res.get('success'):
+                        profiles = res.get('profiles', [])
+                        scraped_urls = []
+                        for profile in profiles:
+                            if 'error' not in profile:
+                                save_to_persistent_db(profile)
+                                scraped_urls.append(profile.get('profile_url'))
+                        if scraped_urls:
+                            with db_lock:
+                                cache_data[name] = scraped_urls
+                                with open(NAME_CACHE_FILE, 'w', encoding='utf-8') as f:
+                                    json.dump(cache_data, f, indent=2)
+                        _broadcast_sse('new_scrape', {'name': name, 'count': len(profiles)})
+                        update_job_status(request_id, 'completed', scraped_at=datetime.now().isoformat())
+                    else:
+                        update_job_status(request_id, 'failed', error=res.get('error', 'Unknown error'))
+                except Exception as e:
+                    import traceback
+                    traceback.print_exc()
+                    update_job_status(request_id, 'failed', error=str(e))
 
         asyncio.run_coroutine_threadsafe(background_search_and_extract(), _bg_loop)
         
@@ -915,23 +924,28 @@ def _format_current_job_for_csv(job):
 @app.route('/api/scraper/export', methods=['POST'])
 def export_data():
     try:
-        data = request.json
+        data = request.json or {}
         export_payload = data.get('data', {})
         format_type = data.get('format', 'json')
         if not export_payload:
             return jsonify({'success': False, 'error': 'No data'}), 400
+
+        if isinstance(export_payload, list):
+            profiles = export_payload
+        elif isinstance(export_payload, dict) and 'profiles' in export_payload:
+            profiles = export_payload.get('profiles') or []
+        elif isinstance(export_payload, dict):
+            profiles = [export_payload]
+        else:
+            profiles = []
+
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         Path("exports").mkdir(exist_ok=True)
         if format_type == 'json':
             filename = f"linkedin_export_{timestamp}.json"
             filepath = Path("exports") / filename
             # Clean profiles before saving — remove nulls and junk symbols
-            cleaned_payload = export_payload
-            if 'profiles' in export_payload:
-                cleaned_payload = {
-                    **export_payload,
-                    'profiles': [clean_profile(p) for p in (export_payload.get('profiles') or [])]
-                }
+            cleaned_payload = {'profiles': [clean_profile(p) for p in profiles]}
             with open(filepath, 'w', encoding='utf-8') as f:
                 json.dump(cleaned_payload, f, indent=2, ensure_ascii=False)
             return send_file(filepath, as_attachment=True, download_name=filename)
@@ -940,7 +954,6 @@ def export_data():
             filename = f"linkedin_export_{timestamp}.csv"
             output = io.StringIO()
             writer = csv.writer(output)
-            profiles = export_payload.get('profiles', [])
             if not profiles:
                 return jsonify({'success': False, 'error': 'No profiles in data'}), 400
             # Human-readable column headers
@@ -1146,12 +1159,29 @@ def create_job(return_code, profile_url, person_name=''):
         except Exception as e:
             print(f"Error creating job: {e}")
 
-def save_scraped_data_formats(profile, return_code):
+def save_scraped_data_formats(data_input, return_code):
+    # Support single profile dict or list of profile dicts
+    if isinstance(data_input, list):
+        profiles = [clean_profile(p) for p in data_input if p and 'error' not in p]
+    elif isinstance(data_input, dict) and 'profiles' in data_input:
+        profiles = [clean_profile(p) for p in data_input['profiles'] if p and 'error' not in p]
+    elif isinstance(data_input, dict):
+        profiles = [clean_profile(data_input)]
+    else:
+        profiles = []
+
+    if not profiles:
+        return
+
     # Save cleaned JSON file (remove null values and junk symbols)
-    cp = clean_profile(profile)
     json_path = API_SCRAPES_DIR / f"{return_code}.json"
+    if len(profiles) > 1:
+        json_data = {'profiles': profiles}
+    else:
+        json_data = profiles[0]
+
     with open(json_path, 'w', encoding='utf-8') as f:
-        json.dump(cp, f, indent=2, ensure_ascii=False)
+        json.dump(json_data, f, indent=2, ensure_ascii=False)
         
     # Save CSV file with human-readable expanded columns
     csv_path = API_SCRAPES_DIR / f"{return_code}.csv"
@@ -1163,26 +1193,29 @@ def save_scraped_data_formats(profile, return_code):
         'About', 'Profile URL', 'Scraped At', 'Return Code'
     ]
     
-    row_data = [
-        cp.get('name', ''),
-        cp.get('headline', ''),
-        cp.get('location', ''),
-        _format_current_job_for_csv(cp.get('current_job')),
-        _format_experience_for_csv(cp.get('experiences') or cp.get('experience')),
-        _format_education_for_csv(cp.get('qualifications') or cp.get('education')),
-        _format_skills_for_csv(cp.get('skills')),
-        _format_certifications_for_csv(cp.get('certifications')),
-        (cp.get('about') or '')[:2000],
-        cp.get('profile_url', ''),
-        cp.get('scraped_at', ''),
-        return_code
-    ]
+    rows_data = []
+    for cp in profiles:
+        rows_data.append([
+            cp.get('name', ''),
+            cp.get('headline', ''),
+            cp.get('location', ''),
+            _format_current_job_for_csv(cp.get('current_job')),
+            _format_experience_for_csv(cp.get('experiences') or cp.get('experience')),
+            _format_education_for_csv(cp.get('qualifications') or cp.get('education')),
+            _format_skills_for_csv(cp.get('skills')),
+            _format_certifications_for_csv(cp.get('certifications')),
+            (cp.get('about') or '')[:2000],
+            cp.get('profile_url', ''),
+            cp.get('scraped_at', ''),
+            return_code
+        ])
     
     # Save individual CSV
     with open(csv_path, 'w', newline='', encoding='utf-8') as f:
         writer = csv.writer(f)
         writer.writerow(headers)
-        writer.writerow(row_data)
+        for row in rows_data:
+            writer.writerow(row)
         
     # Append to master CSV file
     master_exists = MASTER_CSV_FILE.exists()
@@ -1190,97 +1223,100 @@ def save_scraped_data_formats(profile, return_code):
         writer = csv.writer(f)
         if not master_exists:
             writer.writerow(headers)
-        writer.writerow(row_data)
+        for row in rows_data:
+            writer.writerow(row)
 
 async def perform_background_scrape(profile_url, return_code):
     global scraper
-    try:
-        if not scraper:
-            print("Auto-initializing scraper for background API request...")
-            _kill_playwright_chromium()
-            scraper = LinkedInScraper(headless=False, browser_type='chromium', session_name='default')
-            await scraper.initialize()
-            
-        profile = await scraper.extract_profile(profile_url)
-        
-        if 'error' in profile:
-            update_job_status(return_code, 'failed', error=profile['error'])
-            print(f"Background scrape failed for {return_code}: {profile['error']}")
-        else:
-            scraped_at = datetime.now().isoformat()
-            profile['scraped_at'] = scraped_at
-            
-            with api_scrape_lock:
-                save_scraped_data_formats(profile, return_code)
+    async with _get_scrape_lock():
+        try:
+            if not scraper:
+                print("Auto-initializing scraper for background API request...")
+                _kill_playwright_chromium()
+                scraper = LinkedInScraper(headless=False, browser_type='chromium', session_name='default')
+                await scraper.initialize()
                 
-            save_to_persistent_db(profile)
-            update_job_status(return_code, 'completed', scraped_at=scraped_at)
-            print(f"Background scrape succeeded for {return_code}")
+            profile = await scraper.extract_profile(profile_url)
             
-    except Exception as e:
-        import traceback
-        traceback.print_exc()
-        update_job_status(return_code, 'failed', error=str(e))
-        print(f"Background scrape exception for {return_code}: {e}")
+            if 'error' in profile:
+                update_job_status(return_code, 'failed', error=profile['error'])
+                print(f"Background scrape failed for {return_code}: {profile['error']}")
+            else:
+                scraped_at = datetime.now().isoformat()
+                profile['scraped_at'] = scraped_at
+                
+                with api_scrape_lock:
+                    save_scraped_data_formats(profile, return_code)
+                    
+                save_to_persistent_db(profile)
+                update_job_status(return_code, 'completed', scraped_at=scraped_at)
+                print(f"Background scrape succeeded for {return_code}")
+                
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            update_job_status(return_code, 'failed', error=str(e))
+            print(f"Background scrape exception for {return_code}: {e}")
 
 async def perform_background_scrape_by_name(person_name, return_code):
     global scraper
-    try:
-        if not scraper:
-            print("Auto-initializing scraper for background name-based request...")
-            _kill_playwright_chromium()
-            scraper = LinkedInScraper(headless=False, browser_type='chromium', session_name='default')
-            await scraper.initialize()
-            
-        if person_name.startswith('http'):
-            profile_url = person_name
-            print(f"Direct URL provided: {profile_url}. Starting extraction...")
-        else:
-            print(f"Searching for person: '{person_name}'")
-            results = await scraper.search_people(person_name, '', max_results=1, force_search=True)
-            if not results:
-                error_msg = f"No profile found for name: {person_name}"
-                update_job_status(return_code, 'failed', error=error_msg)
-                print(error_msg)
-                return
+    async with _get_scrape_lock():
+        try:
+            if not scraper:
+                print("Auto-initializing scraper for background name-based request...")
+                _kill_playwright_chromium()
+                scraper = LinkedInScraper(headless=False, browser_type='chromium', session_name='default')
+                await scraper.initialize()
                 
-            profile_url = results[0]['profile_url']
-            print(f"Found profile URL for {person_name}: {profile_url}. Starting extraction...")
-        
-        with api_scrape_lock:
-            try:
-                data = {}
-                if JOBS_FILE.exists():
-                    with open(JOBS_FILE, 'r', encoding='utf-8') as f:
-                        data = json.load(f)
-                if return_code in data:
-                    data[return_code]['profile_url'] = profile_url
-                    with open(JOBS_FILE, 'w', encoding='utf-8') as f:
-                        json.dump(data, f, indent=2)
-            except Exception as e:
-                print(f"Error updating job profile_url: {e}")
-                
-        profile = await scraper.extract_profile(profile_url)
-        
-        if 'error' in profile:
-            update_job_status(return_code, 'failed', error=profile['error'])
-            print(f"Background scrape failed for {return_code}: {profile['error']}")
-        else:
-            scraped_at = datetime.now().isoformat()
-            profile['scraped_at'] = scraped_at
+            if person_name.startswith('http'):
+                profile_url = person_name
+                print(f"Direct URL provided: {profile_url}. Starting extraction...")
+            else:
+                print(f"Searching for person: '{person_name}'")
+                results = await scraper.search_people(person_name, '', max_results=1, force_search=True)
+                if not results:
+                    error_msg = f"No profile found for name: {person_name}"
+                    update_job_status(return_code, 'failed', error=error_msg)
+                    print(error_msg)
+                    return
+                    
+                profile_url = results[0]['profile_url']
+                print(f"Found profile URL for {person_name}: {profile_url}. Starting extraction...")
             
             with api_scrape_lock:
-                save_scraped_data_formats(profile, return_code)
-                
-            save_to_persistent_db(profile)
-            update_job_status(return_code, 'completed', scraped_at=scraped_at)
-            print(f"Background scrape succeeded for {return_code}")
+                try:
+                    data = {}
+                    if JOBS_FILE.exists():
+                        with open(JOBS_FILE, 'r', encoding='utf-8') as f:
+                            data = json.load(f)
+                    if return_code in data:
+                        data[return_code]['profile_url'] = profile_url
+                        with open(JOBS_FILE, 'w', encoding='utf-8') as f:
+                            json.dump(data, f, indent=2)
+                except Exception as e:
+                    print(f"Error updating job profile_url: {e}")
+                    
+            profile = await scraper.extract_profile(profile_url)
             
-    except Exception as e:
-        import traceback
-        traceback.print_exc()
-        update_job_status(return_code, 'failed', error=str(e))
-        print(f"Background scrape exception for {return_code}: {e}")
+            if 'error' in profile:
+                update_job_status(return_code, 'failed', error=profile['error'])
+                print(f"Background scrape failed for {return_code}: {profile['error']}")
+            else:
+                scraped_at = datetime.now().isoformat()
+                profile['scraped_at'] = scraped_at
+                
+                with api_scrape_lock:
+                    save_scraped_data_formats(profile, return_code)
+                    
+                save_to_persistent_db(profile)
+                update_job_status(return_code, 'completed', scraped_at=scraped_at)
+                print(f"Background scrape succeeded for {return_code}")
+                
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            update_job_status(return_code, 'failed', error=str(e))
+            print(f"Background scrape exception for {return_code}: {e}")
 
 @app.route('/api/client/scrape', methods=['POST'])
 def client_scrape():
@@ -1448,8 +1484,28 @@ def client_scrape_status():
             'error': task.get('error', 'Unknown error')
         }), 200
 
-    # Completed — load profiles from master DB
+    # Completed — load profiles from task JSON or master DB
     if status == 'completed':
+        task_id = task.get('id')
+        if task_id:
+            json_path = API_SCRAPES_DIR / f"{task_id}.json"
+            if json_path.exists():
+                try:
+                    with open(json_path, 'r', encoding='utf-8') as f:
+                        raw = json.load(f)
+                    if isinstance(raw, dict) and 'profiles' in raw:
+                        t_profiles = raw['profiles']
+                    elif isinstance(raw, list):
+                        t_profiles = raw
+                    elif isinstance(raw, dict):
+                        t_profiles = [raw]
+                    else:
+                        t_profiles = []
+                    if t_profiles:
+                        return jsonify({'success': True, 'status': 'completed', 'profiles': t_profiles, 'total': len(t_profiles)}), 200
+                except Exception:
+                    pass
+
         search_name = task.get('_client_name') or task.get('query', name)
         all_profiles = []
         if ALL_PROFILES_JSON.exists():
@@ -2008,12 +2064,10 @@ def client_download_pdf():
         
     jobs = get_jobs_data()
     if return_code not in jobs:
-        return jsonify({'success': False, 'error': 'No scrape request found for the provided return_code'}), 404
-        
-    job = jobs[return_code]
-    status = job.get('status')
-    if status != 'completed':
-        return jsonify({'success': False, 'error': f'Cannot download PDF. Job is in state: {status}'}), 400
+        tasks = _load_bucket_queue()
+        task = next((t for t in tasks if t['id'] == return_code), None)
+        if not task:
+            return jsonify({'success': False, 'error': 'No scrape request found for the provided return_code'}), 404
         
     json_path = API_SCRAPES_DIR / f"{return_code}.json"
     if not json_path.exists():
@@ -2023,13 +2077,21 @@ def client_download_pdf():
         with open(json_path, 'r', encoding='utf-8') as f:
             p = json.load(f)
             
+        if isinstance(p, dict) and 'profiles' in p:
+            profiles = p['profiles']
+        elif isinstance(p, list):
+            profiles = p
+        else:
+            profiles = [p]
+
         pdf_path = API_SCRAPES_DIR / f"{return_code}.pdf"
         pdf = PDF()
-        pdf.add_page()
         pdf.set_margins(15, 40, 15)
         pdf.set_auto_page_break(True, margin=15)
         
-        build_profile_pdf(pdf, p)
+        for prof in profiles:
+            pdf.add_page()
+            build_profile_pdf(pdf, prof)
         
         pdf.output(str(pdf_path))
         return send_file(pdf_path, as_attachment=True, download_name=f"{return_code}.pdf", mimetype='application/pdf')
@@ -2041,21 +2103,29 @@ def client_download_pdf():
 def export_profile_pdf():
     try:
         data = request.json or {}
-        p = data.get('profile')
+        p = data.get('profile') or data.get('profiles')
         if not p:
             return jsonify({'success': False, 'error': 'profile data is required'}), 400
             
+        if isinstance(p, dict) and 'profiles' in p:
+            profiles = p['profiles']
+        elif isinstance(p, list):
+            profiles = p
+        else:
+            profiles = [p]
+
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         Path("exports").mkdir(exist_ok=True)
         filename = f"linkedin_profile_{timestamp}.pdf"
         filepath = Path("exports") / filename
         
         pdf = PDF()
-        pdf.add_page()
         pdf.set_margins(15, 40, 15)
         pdf.set_auto_page_break(True, margin=15)
         
-        build_profile_pdf(pdf, p)
+        for prof in profiles:
+            pdf.add_page()
+            build_profile_pdf(pdf, prof)
         
         pdf.output(str(filepath))
         return send_file(filepath, as_attachment=True, download_name=filename, mimetype='application/pdf')
@@ -2088,7 +2158,84 @@ def export_bulk_pdf():
         return send_file(filepath, as_attachment=True, download_name=filename, mimetype='application/pdf')
     except Exception as e:
         import traceback; traceback.print_exc()
-        return jsonify({'success': False, 'error': f'Error exporting bulk PDF: {str(e)}'}), 500
+@app.route('/api/scraper/export', methods=['POST'])
+def export_scraper_data():
+    """
+    Export scraped profile data (single or bulk) as JSON or CSV file.
+    Accepts JSON body:
+      {
+        "data": { "profiles": [...] } OR { "profile": {...} },
+        "format": "json" | "csv"
+      }
+    """
+    try:
+        req_data = request.json or {}
+        fmt = (req_data.get('format') or 'json').lower()
+        data_obj = req_data.get('data') or {}
+
+        # Extract profiles list
+        profiles = []
+        if isinstance(data_obj, dict):
+            if 'profiles' in data_obj and isinstance(data_obj['profiles'], list):
+                profiles = data_obj['profiles']
+            elif 'profile' in data_obj and isinstance(data_obj['profile'], dict):
+                profiles = [data_obj['profile']]
+        elif isinstance(data_obj, list):
+            profiles = data_obj
+
+        if not profiles:
+            if 'profiles' in req_data and isinstance(req_data['profiles'], list):
+                profiles = req_data['profiles']
+            elif 'profile' in req_data and isinstance(req_data['profile'], dict):
+                profiles = [req_data['profile']]
+
+        if not profiles:
+            return jsonify({'success': False, 'error': 'No profiles found to export'}), 400
+
+        # Clean all profiles
+        cleaned_profiles = [clean_profile(p) for p in profiles]
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        Path("exports").mkdir(exist_ok=True)
+
+        if fmt == 'csv':
+            filename = f"linkedin_export_bulk_{timestamp}.csv" if len(cleaned_profiles) > 1 else f"linkedin_export_{timestamp}.csv"
+            filepath = Path("exports") / filename
+
+            headers = [
+                'name', 'headline', 'location', 'profile_picture', 'about', 
+                'current_job', 'experience', 'qualifications', 'certifications', 
+                'profile_url', 'scraped_at'
+            ]
+            with open(filepath, 'w', newline='', encoding='utf-8-sig') as f:
+                writer = csv.writer(f)
+                writer.writerow(headers)
+                for p in cleaned_profiles:
+                    writer.writerow([
+                        p.get('name', ''),
+                        p.get('headline', ''),
+                        p.get('location', ''),
+                        p.get('profile_picture', ''),
+                        p.get('about', ''),
+                        json.dumps(p.get('current_job', {})),
+                        json.dumps(p.get('experience', []) or p.get('experiences', [])),
+                        json.dumps(p.get('qualifications', []) or p.get('education', [])),
+                        json.dumps(p.get('certifications', [])),
+                        p.get('profile_url', ''),
+                        p.get('scraped_at', '')
+                    ])
+            return send_file(filepath, as_attachment=True, download_name=filename, mimetype='text/csv')
+
+        else:  # Default JSON export
+            filename = f"linkedin_export_bulk_{timestamp}.json" if len(cleaned_profiles) > 1 else f"linkedin_export_{timestamp}.json"
+            filepath = Path("exports") / filename
+            with open(filepath, 'w', encoding='utf-8') as f:
+                json.dump({'profiles': cleaned_profiles, 'total': len(cleaned_profiles)}, f, indent=2, ensure_ascii=False)
+            return send_file(filepath, as_attachment=True, download_name=filename, mimetype='application/json')
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': f'Export error: {str(e)}'}), 500
 
 # =====================================================================
 # API REQUESTS MONITORING & PERSONA BULK SCRAPER
@@ -2407,105 +2554,108 @@ def destroy_db():
 # Background Bulk scraping worker
 async def perform_background_bulk_scrape(profile_urls, return_code):
     global scraper
-    try:
-        if not scraper:
-            print("Auto-initializing scraper for background bulk API request...")
-            _kill_playwright_chromium()
-            scraper = LinkedInScraper(headless=False, browser_type='chromium', session_name='default')
-            await scraper.initialize()
-            
-        scraped_profiles = []
-        errors = []
-        
-        for idx, url in enumerate(profile_urls):
-            print(f"Bulk scraping {idx+1}/{len(profile_urls)}: {url}")
-            profile = await scraper.extract_profile(url)
-            if 'error' in profile:
-                errors.append(f"{url}: {profile['error']}")
-            else:
-                scraped_profiles.append(profile)
-            
-            if idx < len(profile_urls) - 1:
-                await asyncio.sleep(4)
-        
-        scraped_at = datetime.now().isoformat()
-        
-        with api_scrape_lock:
-            # Save JSON containing list of profiles
-            json_path = API_SCRAPES_DIR / f"{return_code}.json"
-            with open(json_path, 'w', encoding='utf-8') as f:
-                json.dump({'profiles': scraped_profiles}, f, indent=2, ensure_ascii=False)
+    async with _get_scrape_lock():
+        try:
+            if not scraper:
+                print("Auto-initializing scraper for background bulk API request...")
+                _kill_playwright_chromium()
+                scraper = LinkedInScraper(headless=False, browser_type='chromium', session_name='default')
+                await scraper.initialize()
                 
-            # Save CSV file containing all scraped profiles
-            csv_path = API_SCRAPES_DIR / f"{return_code}.csv"
-            headers = [
-                'name', 'headline', 'location', 'profile_picture', 'about', 
-                'current_job', 'experience', 'qualifications', 'certifications', 
-                'profile_url', 'scraped_at', 'return_code'
-            ]
+            scraped_profiles = []
+            errors = []
             
-            with open(csv_path, 'w', newline='', encoding='utf-8') as f:
-                writer = csv.writer(f)
-                writer.writerow(headers)
-                for profile in scraped_profiles:
-                    profile['scraped_at'] = scraped_at
-                    writer.writerow([
-                        profile.get('name', ''),
-                        profile.get('headline', ''),
-                        profile.get('location', ''),
-                        profile.get('profile_picture', ''),
-                        profile.get('about', ''),
-                        json.dumps(profile.get('current_job', {})),
-                        json.dumps(profile.get('experience', [])),
-                        json.dumps(profile.get('qualifications', [])),
-                        json.dumps(profile.get('certifications', [])),
-                        profile.get('profile_url', ''),
-                        profile.get('scraped_at', ''),
-                        return_code
-                    ])
+            for idx, url in enumerate(profile_urls):
+                print(f"Bulk scraping {idx+1}/{len(profile_urls)}: {url}")
+                profile = await scraper.extract_profile(url)
+                if 'error' in profile:
+                    errors.append(f"{url}: {profile['error']}")
+                else:
+                    scraped_profiles.append(profile)
+                
+                if idx < len(profile_urls) - 1:
+                    import random
+                    delay = random.randint(12, 25)
+                    print(f"[BulkScrape] Resting {delay}s before next profile...")
+                    await asyncio.sleep(delay)
             
-            # Append each to master CSV
-            master_exists = MASTER_CSV_FILE.exists()
-            with open(MASTER_CSV_FILE, 'a', newline='', encoding='utf-8') as f:
-                writer = csv.writer(f)
-                if not master_exists:
-                    writer.writerow(headers)
-                for profile in scraped_profiles:
-                    writer.writerow([
-                        profile.get('name', ''),
-                        profile.get('headline', ''),
-                        profile.get('location', ''),
-                        profile.get('profile_picture', ''),
-                        profile.get('about', ''),
-                        json.dumps(profile.get('current_job', {})),
-                        json.dumps(profile.get('experience', [])),
-                        json.dumps(profile.get('qualifications', [])),
-                        json.dumps(profile.get('certifications', [])),
-                        profile.get('profile_url', ''),
-                        profile.get('scraped_at', ''),
-                        return_code
-                    ])
+            scraped_at = datetime.now().isoformat()
+            
+            with api_scrape_lock:
+                # Save JSON containing list of profiles
+                json_path = API_SCRAPES_DIR / f"{return_code}.json"
+                with open(json_path, 'w', encoding='utf-8') as f:
+                    json.dump({'profiles': scraped_profiles}, f, indent=2, ensure_ascii=False)
                     
-        for profile in scraped_profiles:
-            save_to_persistent_db(profile)
-        
-        if not scraped_profiles and errors:
-            update_job_status(return_code, 'failed', error="All profile scrapes failed: " + "; ".join(errors))
-        else:
-            update_job_status(return_code, 'completed', scraped_at=scraped_at, error="; ".join(errors) if errors else None)
+                # Save CSV file containing all scraped profiles
+                csv_path = API_SCRAPES_DIR / f"{return_code}.csv"
+                headers = [
+                    'name', 'headline', 'location', 'profile_picture', 'about', 
+                    'current_job', 'experience', 'qualifications', 'certifications', 
+                    'profile_url', 'scraped_at', 'return_code'
+                ]
+                
+                with open(csv_path, 'w', newline='', encoding='utf-8') as f:
+                    writer = csv.writer(f)
+                    writer.writerow(headers)
+                    for profile in scraped_profiles:
+                        profile['scraped_at'] = scraped_at
+                        writer.writerow([
+                            profile.get('name', ''),
+                            profile.get('headline', ''),
+                            profile.get('location', ''),
+                            profile.get('profile_picture', ''),
+                            profile.get('about', ''),
+                            json.dumps(profile.get('current_job', {})),
+                            json.dumps(profile.get('experience', [])),
+                            json.dumps(profile.get('qualifications', [])),
+                            json.dumps(profile.get('certifications', [])),
+                            profile.get('profile_url', ''),
+                            profile.get('scraped_at', ''),
+                            return_code
+                        ])
+                
+                # Append each to master CSV
+                master_exists = MASTER_CSV_FILE.exists()
+                with open(MASTER_CSV_FILE, 'a', newline='', encoding='utf-8') as f:
+                    writer = csv.writer(f)
+                    if not master_exists:
+                        writer.writerow(headers)
+                    for profile in scraped_profiles:
+                        writer.writerow([
+                            profile.get('name', ''),
+                            profile.get('headline', ''),
+                            profile.get('location', ''),
+                            profile.get('profile_picture', ''),
+                            profile.get('about', ''),
+                            json.dumps(profile.get('current_job', {})),
+                            json.dumps(profile.get('experience', [])),
+                            json.dumps(profile.get('qualifications', [])),
+                            json.dumps(profile.get('certifications', [])),
+                            profile.get('profile_url', ''),
+                            profile.get('scraped_at', ''),
+                            return_code
+                        ])
+                        
+            for profile in scraped_profiles:
+                save_to_persistent_db(profile)
             
-        print(f"Background bulk scrape completed for {return_code}")
-        
-    except Exception as e:
-        import traceback
-        traceback.print_exc()
-        update_job_status(return_code, 'failed', error=str(e))
-        print(f"Background bulk scrape exception for {return_code}: {e}")
+            if not scraped_profiles and errors:
+                update_job_status(return_code, 'failed', error="All profile scrapes failed: " + "; ".join(errors))
+            else:
+                update_job_status(return_code, 'completed', scraped_at=scraped_at, error="; ".join(errors) if errors else None)
+                
+            print(f"Background bulk scrape completed for {return_code}")
+            
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            update_job_status(return_code, 'failed', error=str(e))
+            print(f"Background bulk scrape exception for {return_code}: {e}")
 
 # Bulk Scraper Route (Branded as PERSONA)
 @app.route('/api/persona/bulk-scrape', methods=['POST'])
 def persona_bulk_scrape():
-        
     data = request.json or {}
     profile_urls = data.get('profile_urls', [])
     return_code = data.get('return_code', '').strip()
@@ -2547,11 +2697,36 @@ def persona_bulk_scrape():
         except Exception as e:
             return jsonify({'success': False, 'error': f'Error creating bulk job: {str(e)}'}), 500
             
-    asyncio.run_coroutine_threadsafe(perform_background_bulk_scrape(profile_urls, return_code), _bg_loop)
+    # Enqueue tasks into Task Bucket queue linked to return_code
+    tasks = _load_bucket_queue()
+    added = []
+    for url in profile_urls:
+        u = str(url).strip()
+        if not u:
+            continue
+        task = {
+            'id': str(_uuid.uuid4()),
+            'query': u,
+            'type': 'url' if u.startswith('http') else 'name',
+            'status': 'pending',
+            'added_at': datetime.now().isoformat(),
+            'started_at': None,
+            'completed_at': None,
+            'result_name': '',
+            'result_url': u if u.startswith('http') else '',
+            'error': None,
+            'bulk_return_code': return_code
+        }
+        tasks.append(task)
+        added.append(task)
+
+    _save_bucket_queue(tasks)
+    _broadcast_sse('bucket_tasks_added', {'count': len(added), 'bulk_return_code': return_code})
+    _ensure_worker_running()
     
     return jsonify({
         'success': True,
-        'message': 'Bulk scrape request queued successfully in background.',
+        'message': f'Bulk scrape request with {len(added)} item(s) queued successfully into the queue.',
         'return_code': return_code,
         'status': 'in_progress'
     }), 202
@@ -2839,6 +3014,7 @@ BUCKET_QUEUE_FILE = BUCKET_DIR / "queue.json"
 BUCKET_CONFIG_FILE = BUCKET_DIR / "config.json"
 
 bucket_lock = threading.Lock()
+_worker_launch_lock = threading.Lock()
 
 # ── Worker state ─────────────────────────────────────────────────────────────
 _bucket_worker_paused = False
@@ -2862,6 +3038,42 @@ def _save_bucket_queue(tasks: list):
         BUCKET_QUEUE_FILE.parent.mkdir(parents=True, exist_ok=True)
         with open(BUCKET_QUEUE_FILE, 'w', encoding='utf-8') as f:
             json.dump(tasks, f, indent=2, ensure_ascii=False)
+
+
+def _cleanup_stale_in_progress_tasks():
+    """Reset any tasks marked as in_progress back to pending on startup."""
+    tasks = _load_bucket_queue()
+    changed = False
+    for t in tasks:
+        if t.get('status') == 'in_progress':
+            t['status'] = 'pending'
+            t['started_at'] = None
+            changed = True
+    if changed:
+        _save_bucket_queue(tasks)
+
+_cleanup_stale_in_progress_tasks()
+
+
+def _pop_next_pending_task():
+    """Atomically find the first pending task in queue.json and mark it in_progress."""
+    with bucket_lock:
+        if not BUCKET_QUEUE_FILE.exists():
+            return None
+        try:
+            with open(BUCKET_QUEUE_FILE, 'r', encoding='utf-8') as f:
+                tasks = json.load(f)
+        except Exception:
+            return None
+
+        for t in tasks:
+            if t.get('status') == 'pending':
+                t['status'] = 'in_progress'
+                t['started_at'] = datetime.now().isoformat()
+                with open(BUCKET_QUEUE_FILE, 'w', encoding='utf-8') as f:
+                    json.dump(tasks, f, indent=2, ensure_ascii=False)
+                return t
+    return None
 
 
 def _load_bucket_config():
@@ -2889,256 +3101,336 @@ def _update_bucket_task(task_id: str, **kwargs):
     _save_bucket_queue(tasks)
 
 
+def _check_and_finalize_bulk_job(bulk_return_code: str):
+    """Check if all tasks belonging to bulk_return_code are done. If so, consolidate data and update jobs.json."""
+    if not bulk_return_code:
+        return
+    tasks = _load_bucket_queue()
+    related = [t for t in tasks if t.get('bulk_return_code') == bulk_return_code]
+    if not related:
+        return
+    unfinished = [t for t in related if t.get('status') in ('pending', 'in_progress')]
+    if unfinished:
+        return  # still running
+
+    # All related tasks are finished! Collect profiles from completed tasks.
+    scraped_profiles = []
+    errors = []
+
+    for t in related:
+        t_id = t.get('id')
+        if t.get('status') == 'failed':
+            if t.get('error'):
+                errors.append(f"{t.get('query')}: {t.get('error')}")
+        elif t.get('status') == 'completed' and t_id:
+            json_path = API_SCRAPES_DIR / f"{t_id}.json"
+            if json_path.exists():
+                try:
+                    with open(json_path, 'r', encoding='utf-8') as f:
+                        raw = json.load(f)
+                    if isinstance(raw, dict) and 'profiles' in raw:
+                        scraped_profiles.extend(raw['profiles'])
+                    elif isinstance(raw, list):
+                        scraped_profiles.extend(raw)
+                    elif isinstance(raw, dict):
+                        scraped_profiles.append(raw)
+                except Exception:
+                    pass
+
+    # Save consolidated bulk JSON and CSV
+    scraped_at = datetime.now().isoformat()
+    with api_scrape_lock:
+        json_path = API_SCRAPES_DIR / f"{bulk_return_code}.json"
+        with open(json_path, 'w', encoding='utf-8') as f:
+            json.dump({'profiles': scraped_profiles}, f, indent=2, ensure_ascii=False)
+
+        csv_path = API_SCRAPES_DIR / f"{bulk_return_code}.csv"
+        headers = [
+            'name', 'headline', 'location', 'profile_picture', 'about', 
+            'current_job', 'experience', 'qualifications', 'certifications', 
+            'profile_url', 'scraped_at', 'return_code'
+        ]
+        with open(csv_path, 'w', newline='', encoding='utf-8') as f:
+            writer = csv.writer(f)
+            writer.writerow(headers)
+            for p in scraped_profiles:
+                writer.writerow([
+                    p.get('name', ''), p.get('headline', ''), p.get('location', ''),
+                    p.get('profile_picture', ''), p.get('about', ''),
+                    json.dumps(p.get('current_job', {})),
+                    json.dumps(p.get('experience', []) or p.get('experiences', [])),
+                    json.dumps(p.get('qualifications', []) or p.get('education', [])),
+                    json.dumps(p.get('certifications', [])),
+                    p.get('profile_url', ''),
+                    p.get('scraped_at', scraped_at),
+                    bulk_return_code
+                ])
+
+    final_status = 'completed' if scraped_profiles or not errors else 'failed'
+    err_str = "; ".join(errors) if errors else None
+    update_job_status(bulk_return_code, final_status, scraped_at=scraped_at, error=err_str)
+    print(f"[TaskBucket] Bulk job '{bulk_return_code}' finalized: status={final_status} ({len(scraped_profiles)} profiles)")
+
+
 # ── Background worker ─────────────────────────────────────────────────────────
 async def _bucket_worker():
     """
-    Infinite loop that picks the next pending task, executes it,
-    waits rest_seconds, then repeats. Respects the pause flag.
-    Handles task types:
-      - 'search'  : search by name then extract all found profiles
-      - 'url'     : extract a specific profile URL
-      - 'name'    : search by name string and extract first result
+    Background worker loop for processing Task Bucket items one by one sequentially.
+    Guaranteed single-worker execution.
     """
     global _bucket_worker_running, _bucket_worker_paused, scraper
-    _bucket_worker_running = True
-    print("[TaskBucket] Worker started")
+    print("[TaskBucket] Worker thread started")
     try:
         while True:
             if _bucket_worker_paused:
                 await asyncio.sleep(2)
                 continue
 
-            tasks = _load_bucket_queue()
-            pending = [t for t in tasks if t['status'] == 'pending']
-            if not pending:
+            task = _pop_next_pending_task()
+            if not task:
                 await asyncio.sleep(3)
                 continue
 
-            task = pending[0]
             task_id   = task['id']
             query     = task['query']
             task_type = task.get('type', 'name')
+            bulk_rc   = task.get('bulk_return_code')
 
-            print(f"[TaskBucket] Starting task {task_id} ({task_type}): {query}")
-            _update_bucket_task(task_id, status='in_progress', started_at=datetime.now().isoformat())
+            print(f"[TaskBucket] Processing task {task_id} ({task_type}): '{query}'")
             _broadcast_sse('bucket_update', {'task_id': task_id, 'status': 'in_progress', 'query': query})
 
             try:
-
-                # Auto-init scraper if needed, or re-verify current session authentication
-                if not scraper:
-                    _kill_playwright_chromium()  # clear orphan processes before launching
-                    s = LinkedInScraper(headless=False, browser_type='chromium', session_name='default')
-                    await s.initialize()
-                    scraper = s
-                else:
-                    is_ok = await scraper.check_auth()
-                    if not is_ok:
-                        print("[TaskBucket] Existing scraper session expired or browser disconnected. Re-initializing...")
-                        try:
-                            await scraper.close()
-                        except Exception:
-                            pass
-                        scraper = None
-                        _kill_playwright_chromium()  # clear orphan processes before re-launching
+                async with _get_scrape_lock():
+                    # Auto-init scraper if needed, or re-verify current session authentication
+                    if not scraper:
+                        _kill_playwright_chromium()  # clear orphan processes before launching
                         s = LinkedInScraper(headless=False, browser_type='chromium', session_name='default')
                         await s.initialize()
                         scraper = s
+                    else:
+                        is_ok = await scraper.check_auth()
+                        if not is_ok:
+                            print("[TaskBucket] Scraper session invalid/disconnected. Re-initializing...")
+                            try:
+                                await scraper.close()
+                            except Exception:
+                                pass
+                            scraper = None
+                            _kill_playwright_chromium()  # clear orphan processes before re-launching
+                            s = LinkedInScraper(headless=False, browser_type='chromium', session_name='default')
+                            await s.initialize()
+                            scraper = s
 
+                    if not scraper.is_authenticated:
+                        raise ValueError("LinkedIn session not authenticated. Please log in via the admin dashboard first.")
 
-                if not scraper.is_authenticated:
-                    raise ValueError("LinkedIn session not authenticated. Please log in via the admin dashboard first.")
+                    # ── Handle by task type ──────────────────────────────
+                    if task_type == 'search':
+                        # Structured search → extract all found profiles
+                        sp = task.get('search_params', {})
+                        fn  = sp.get('first_name', query)
+                        ln  = sp.get('last_name', '')
+                        co  = sp.get('company', '')
+                        mx  = int(sp.get('max_results', 5))
 
-                # ── Handle by task type ──────────────────────────────
-                if task_type == 'search':
-                    # Structured search → extract all found profiles
-                    sp = task.get('search_params', {})
-                    fn  = sp.get('first_name', query)
-                    ln  = sp.get('last_name', '')
-                    co  = sp.get('company', '')
-                    mx  = int(sp.get('max_results', 5))
+                        print(f"[TaskBucket] Searching: '{fn} {ln}' company='{co}' max={mx}")
+                        search_results = await scraper.search_people(fn, ln, co, max_results=mx)
 
-                    print(f"[TaskBucket] Searching: '{fn} {ln}' company='{co}' max={mx}")
-                    search_results = await scraper.search_people(fn, ln, co, max_results=mx)
+                        if not search_results:
+                            raise ValueError(f"No profiles found for: {query}")
 
-                    if not search_results:
-                        raise ValueError(f"No profiles found for: {query}")
+                        print(f"[TaskBucket] Found {len(search_results)} profiles, extracting…")
+                        extracted = []
+                        for idx, sr in enumerate(search_results):
+                            try:
+                                profile = await scraper.extract_profile(sr['profile_url'])
+                                if 'error' not in profile:
+                                    profile['scraped_at'] = datetime.now().isoformat()
+                                    save_to_persistent_db(profile)
+                                    extracted.append(profile)
+                                    _broadcast_sse('new_scrape', {'name': profile.get('name', query), 'count': 1})
+                                if idx < len(search_results) - 1:
+                                    await asyncio.sleep(5)   # small gap between profiles in same task
+                            except Exception as pe:
+                                print(f"[TaskBucket] Profile extract error: {pe}")
 
-                    print(f"[TaskBucket] Found {len(search_results)} profiles, extracting…")
-                    extracted = []
-                    for idx, sr in enumerate(search_results):
-                        try:
-                            profile = await scraper.extract_profile(sr['profile_url'])
-                            if 'error' not in profile:
-                                profile['scraped_at'] = datetime.now().isoformat()
-                                save_to_persistent_db(profile)
-                                extracted.append(profile)
-                                _broadcast_sse('new_scrape', {'name': profile.get('name', query), 'count': 1})
-                            if idx < len(search_results) - 1:
-                                await asyncio.sleep(5)   # small gap between profiles in same task
-                        except Exception as pe:
-                            print(f"[TaskBucket] Profile extract error: {pe}")
+                        # Write to name cache so client status lookup works by name
+                        client_name = task.get('_client_name') or query
+                        scraped_urls = [p.get('profile_url') for p in extracted if p.get('profile_url')]
+                        if scraped_urls:
+                            with db_lock:
+                                cache_data = {}
+                                if NAME_CACHE_FILE.exists():
+                                    try:
+                                        with open(NAME_CACHE_FILE, 'r', encoding='utf-8') as _f:
+                                            cache_data = json.load(_f)
+                                    except Exception:
+                                        pass
+                                cache_data[client_name] = scraped_urls
+                                with open(NAME_CACHE_FILE, 'w', encoding='utf-8') as _f:
+                                    json.dump(cache_data, _f, indent=2)
 
-                    # Write to name cache so client status lookup works by name
-                    client_name = task.get('_client_name') or query
-                    scraped_urls = [p.get('profile_url') for p in extracted if p.get('profile_url')]
-                    if scraped_urls:
-                        with db_lock:
-                            cache_data = {}
-                            if NAME_CACHE_FILE.exists():
-                                try:
-                                    with open(NAME_CACHE_FILE, 'r', encoding='utf-8') as _f:
-                                        cache_data = json.load(_f)
-                                except Exception:
-                                    pass
-                            cache_data[client_name] = scraped_urls
-                            with open(NAME_CACHE_FILE, 'w', encoding='utf-8') as _f:
-                                json.dump(cache_data, _f, indent=2)
+                        names = ', '.join(p.get('name', '') for p in extracted[:3])
+                        if len(extracted) > 3:
+                            names += f' +{len(extracted)-3} more'
 
-                    names = ', '.join(p.get('name', '') for p in extracted[:3])
-                    if len(extracted) > 3:
-                        names += f' +{len(extracted)-3} more'
+                        # Save files for individual download or details retrieval
+                        if extracted:
+                            with api_scrape_lock:
+                                save_scraped_data_formats(extracted, task_id)
 
-                    # Save files for individual download or details retrieval
-                    if extracted:
-                        # For search tasks, we save the first successful profile under task_id, or aggregate
-                        # Let's save the first one or a summary/first profile to make JSON/CSV downloads work
+                        completed_time = datetime.now().isoformat()
+                        _update_bucket_task(
+                            task_id,
+                            status='completed',
+                            completed_at=completed_time,
+                            result_name=names or query,
+                            profiles_found=len(extracted),
+                            error=None
+                        )
+                        
+                        # Log to jobs.json for compatibility
                         with api_scrape_lock:
-                            save_scraped_data_formats(extracted[0], task_id)
+                            jobs_data = {}
+                            if JOBS_FILE.exists():
+                                with open(JOBS_FILE, 'r', encoding='utf-8') as f:
+                                    jobs_data = json.load(f)
+                            jobs_data[task_id] = {
+                                'profile_url': search_results[0]['profile_url'] if search_results else '',
+                                'person_name': names or query,
+                                'status': 'completed',
+                                'requested_at': task.get('added_at', completed_time),
+                                'scraped_at': completed_time,
+                                'error': None
+                            }
+                            with open(JOBS_FILE, 'w', encoding='utf-8') as f:
+                                json.dump(jobs_data, f, indent=2)
 
-                    completed_time = datetime.now().isoformat()
-                    _update_bucket_task(
-                        task_id,
-                        status='completed',
-                        completed_at=completed_time,
-                        result_name=names or query,
-                        profiles_found=len(extracted),
-                        error=None
-                    )
-                    
-                    # Log to jobs.json for compatibility
-                    with api_scrape_lock:
-                        jobs_data = {}
-                        if JOBS_FILE.exists():
-                            with open(JOBS_FILE, 'r', encoding='utf-8') as f:
-                                jobs_data = json.load(f)
-                        jobs_data[task_id] = {
-                            'profile_url': search_results[0]['profile_url'] if search_results else '',
-                            'person_name': names or query,
-                            'status': 'completed',
-                            'requested_at': task.get('added_at', completed_time),
-                            'scraped_at': completed_time,
-                            'error': None
-                        }
-                        with open(JOBS_FILE, 'w', encoding='utf-8') as f:
-                            json.dump(jobs_data, f, indent=2)
+                        print(f"[TaskBucket] Task {task_id} completed: {len(extracted)} profile(s) scraped")
+                        _broadcast_sse('bucket_update', {
+                            'task_id': task_id, 'status': 'completed',
+                            'query': query, 'result_name': names, 'profiles_found': len(extracted)
+                        })
 
-                    print(f"[TaskBucket] Task {task_id} completed: {len(extracted)} profile(s) scraped")
-                    _broadcast_sse('bucket_update', {
-                        'task_id': task_id, 'status': 'completed',
-                        'query': query, 'result_name': names, 'profiles_found': len(extracted)
-                    })
+                    elif task_type == 'url' or query.startswith('http'):
+                        # Direct URL scrape
+                        profile = await scraper.extract_profile(query)
+                        if 'error' in profile:
+                            raise ValueError(profile['error'])
+                        completed_time = datetime.now().isoformat()
+                        profile['scraped_at'] = completed_time
+                        save_to_persistent_db(profile)
+                        
+                        with api_scrape_lock:
+                            save_scraped_data_formats(profile, task_id)
 
-                elif task_type == 'url' or query.startswith('http'):
-                    # Direct URL scrape
-                    profile = await scraper.extract_profile(query)
-                    if 'error' in profile:
-                        raise ValueError(profile['error'])
-                    completed_time = datetime.now().isoformat()
-                    profile['scraped_at'] = completed_time
-                    save_to_persistent_db(profile)
-                    
-                    with api_scrape_lock:
-                        save_scraped_data_formats(profile, task_id)
+                        _broadcast_sse('new_scrape', {'name': profile.get('name', query), 'count': 1})
+                        _update_bucket_task(
+                            task_id,
+                            status='completed',
+                            completed_at=completed_time,
+                            result_name=profile.get('name', ''),
+                            result_url=query,
+                            profiles_found=1,
+                            error=None
+                        )
+                        
+                        # Log to jobs.json for compatibility
+                        with api_scrape_lock:
+                            jobs_data = {}
+                            if JOBS_FILE.exists():
+                                with open(JOBS_FILE, 'r', encoding='utf-8') as f:
+                                    jobs_data = json.load(f)
+                            jobs_data[task_id] = {
+                                'profile_url': query,
+                                'person_name': profile.get('name', query),
+                                'status': 'completed',
+                                'requested_at': task.get('added_at', completed_time),
+                                'scraped_at': completed_time,
+                                'error': None
+                            }
+                            with open(JOBS_FILE, 'w', encoding='utf-8') as f:
+                                json.dump(jobs_data, f, indent=2)
 
-                    _broadcast_sse('new_scrape', {'name': profile.get('name', query), 'count': 1})
-                    _update_bucket_task(
-                        task_id,
-                        status='completed',
-                        completed_at=completed_time,
-                        result_name=profile.get('name', ''),
-                        result_url=query,
-                        profiles_found=1,
-                        error=None
-                    )
-                    
-                    # Log to jobs.json for compatibility
-                    with api_scrape_lock:
-                        jobs_data = {}
-                        if JOBS_FILE.exists():
-                            with open(JOBS_FILE, 'r', encoding='utf-8') as f:
-                                jobs_data = json.load(f)
-                        jobs_data[task_id] = {
-                            'profile_url': query,
-                            'person_name': profile.get('name', query),
-                            'status': 'completed',
-                            'requested_at': task.get('added_at', completed_time),
-                            'scraped_at': completed_time,
-                            'error': None
-                        }
-                        with open(JOBS_FILE, 'w', encoding='utf-8') as f:
-                            json.dump(jobs_data, f, indent=2)
+                        print(f"[TaskBucket] Task {task_id} completed: {profile.get('name', query)}")
+                        _broadcast_sse('bucket_update', {
+                            'task_id': task_id, 'status': 'completed',
+                            'query': query, 'result_name': profile.get('name', '')
+                        })
 
-                    print(f"[TaskBucket] Task {task_id} completed: {profile.get('name', query)}")
-                    _broadcast_sse('bucket_update', {
-                        'task_id': task_id, 'status': 'completed',
-                        'query': query, 'result_name': profile.get('name', '')
-                    })
+                    else:
+                        # 'name' — search for first match and extract
+                        results = await scraper.search_people(query, '', max_results=1, force_search=True)
+                        if not results:
+                            raise ValueError(f"No profile found for: {query}")
+                        profile_url = results[0]['profile_url']
+                        profile = await scraper.extract_profile(profile_url)
+                        if 'error' in profile:
+                            raise ValueError(profile['error'])
+                        completed_time = datetime.now().isoformat()
+                        profile['scraped_at'] = completed_time
+                        save_to_persistent_db(profile)
+                        
+                        with api_scrape_lock:
+                            save_scraped_data_formats(profile, task_id)
 
-                else:
-                    # 'name' — search for first match and extract
-                    results = await scraper.search_people(query, '', max_results=1, force_search=True)
-                    if not results:
-                        raise ValueError(f"No profile found for: {query}")
-                    profile_url = results[0]['profile_url']
-                    profile = await scraper.extract_profile(profile_url)
-                    if 'error' in profile:
-                        raise ValueError(profile['error'])
-                    completed_time = datetime.now().isoformat()
-                    profile['scraped_at'] = completed_time
-                    save_to_persistent_db(profile)
-                    
-                    with api_scrape_lock:
-                        save_scraped_data_formats(profile, task_id)
+                        _broadcast_sse('new_scrape', {'name': profile.get('name', query), 'count': 1})
+                        _update_bucket_task(
+                            task_id,
+                            status='completed',
+                            completed_at=completed_time,
+                            result_name=profile.get('name', ''),
+                            result_url=profile_url,
+                            profiles_found=1,
+                            error=None
+                        )
+                        
+                        # Log to jobs.json for compatibility
+                        with api_scrape_lock:
+                            jobs_data = {}
+                            if JOBS_FILE.exists():
+                                with open(JOBS_FILE, 'r', encoding='utf-8') as f:
+                                    jobs_data = json.load(f)
+                            jobs_data[task_id] = {
+                                'profile_url': profile_url,
+                                'person_name': profile.get('name', query),
+                                'status': 'completed',
+                                'requested_at': task.get('added_at', completed_time),
+                                'scraped_at': completed_time,
+                                'error': None
+                            }
+                            with open(JOBS_FILE, 'w', encoding='utf-8') as f:
+                                json.dump(jobs_data, f, indent=2)
 
-                    _broadcast_sse('new_scrape', {'name': profile.get('name', query), 'count': 1})
-                    _update_bucket_task(
-                        task_id,
-                        status='completed',
-                        completed_at=completed_time,
-                        result_name=profile.get('name', ''),
-                        result_url=profile_url,
-                        profiles_found=1,
-                        error=None
-                    )
-                    
-                    # Log to jobs.json for compatibility
-                    with api_scrape_lock:
-                        jobs_data = {}
-                        if JOBS_FILE.exists():
-                            with open(JOBS_FILE, 'r', encoding='utf-8') as f:
-                                jobs_data = json.load(f)
-                        jobs_data[task_id] = {
-                            'profile_url': profile_url,
-                            'person_name': profile.get('name', query),
-                            'status': 'completed',
-                            'requested_at': task.get('added_at', completed_time),
-                            'scraped_at': completed_time,
-                            'error': None
-                        }
-                        with open(JOBS_FILE, 'w', encoding='utf-8') as f:
-                            json.dump(jobs_data, f, indent=2)
-
-                    print(f"[TaskBucket] Task {task_id} completed: {profile.get('name', query)}")
-                    _broadcast_sse('bucket_update', {
-                        'task_id': task_id, 'status': 'completed',
-                        'query': query, 'result_name': profile.get('name', '')
-                    })
+                        print(f"[TaskBucket] Task {task_id} completed: {profile.get('name', query)}")
+                        _broadcast_sse('bucket_update', {
+                            'task_id': task_id, 'status': 'completed',
+                            'query': query, 'result_name': profile.get('name', '')
+                        })
 
             except Exception as exc:
                 import traceback as _tb
                 _tb.print_exc()
                 err = str(exc)
+                if any(k in err.lower() for k in ["target page", "closed", "crashed", "disconnected", "context"]):
+                    is_dead = True
+                    try:
+                        if scraper and scraper.page and not scraper.page.is_closed():
+                            # Page is alive, no need to kill browser process
+                            is_dead = False
+                    except Exception:
+                        is_dead = True
+
+                    if is_dead:
+                        print("[TaskBucket] Browser disconnect detected. Resetting scraper session...")
+                        try:
+                            if scraper:
+                                await scraper.close()
+                        except Exception:
+                            pass
+                        scraper = None
+                        _kill_playwright_chromium()
+
                 completed_time = datetime.now().isoformat()
                 _update_bucket_task(
                     task_id,
@@ -3170,16 +3462,16 @@ async def _bucket_worker():
                     'query': query, 'error': err
                 })
 
+            # Check if this task belongs to a bulk scrape job and finalize if all tasks are done
+            if bulk_rc:
+                _check_and_finalize_bulk_job(bulk_rc)
 
             # Rest period before next task
-            cfg  = _load_bucket_config()
-            
+            cfg = _load_bucket_config()
             import random
-            # Use configured rest_seconds as a base, but randomize it between 30 and 75 seconds
-            # to mimic human behavior and avoid rate limits.
             base_rest = int(cfg.get('rest_seconds', 30))
             if base_rest > 0:
-                rest = random.randint(max(30, base_rest), 75)
+                rest = random.randint(max(15, base_rest), max(25, base_rest + 15))
                 print(f"[TaskBucket] Resting {rest}s before next task…")
                 _broadcast_sse('bucket_rest', {'seconds': rest})
                 elapsed = 0
@@ -3192,17 +3484,18 @@ async def _bucket_worker():
     except asyncio.CancelledError:
         pass
     finally:
-        _bucket_worker_running = False
+        with _worker_launch_lock:
+            _bucket_worker_running = False
         print("[TaskBucket] Worker stopped")
-
 
 
 def _ensure_worker_running():
     """Start the bucket worker coroutine if it isn't already alive."""
     global _bucket_worker_running
-    if not _bucket_worker_running:
-        _bucket_worker_running = True
-        asyncio.run_coroutine_threadsafe(_bucket_worker(), _bg_loop)
+    with _worker_launch_lock:
+        if not _bucket_worker_running:
+            _bucket_worker_running = True
+            asyncio.run_coroutine_threadsafe(_bucket_worker(), _bg_loop)
 
 
 # ── API Endpoints ─────────────────────────────────────────────────────────────
@@ -3267,45 +3560,106 @@ def bucket_upload():
         return jsonify({'success': False, 'error': 'No file selected for uploading'}), 400
 
     tasks_added = []
+    filename_lower = (file.filename or '').lower()
+
     try:
-        if file.filename.endswith('.csv'):
-            stream = io.StringIO(file.stream.read().decode("UTF8"), newline=None)
-            csv_input = csv.reader(stream)
-            # Skip header if it looks like one, or just parse blindly
+        raw_bytes = file.stream.read()
+        if not raw_bytes:
+            return jsonify({'success': False, 'error': 'Uploaded file is empty'}), 400
+
+        if filename_lower.endswith('.csv'):
+            try:
+                text_content = raw_bytes.decode('utf-8-sig')
+            except UnicodeDecodeError:
+                text_content = raw_bytes.decode('latin-1', errors='replace')
+
+            stream = io.StringIO(text_content, newline=None)
+            csv_input = list(csv.reader(stream))
+            if not csv_input:
+                return jsonify({'success': False, 'error': 'CSV file contains no rows'}), 400
+
+            # Synonym set for headers
+            possible_headers = {
+                'query', 'queries', 'name', 'full_name', 'fullname', 'person_name',
+                'username', 'url', 'profile', 'profile_url', 'linkedin_url', 'link',
+                'linkedin', 'search', 'user', 'profile link', 'linkedin profile'
+            }
+
             first_row = True
+            header_col_idx = 0
+
             for row in csv_input:
-                if not row: continue
-                if first_row and row[0].strip().lower() in ['query', 'name', 'url', 'linkedin_url', 'profile']:
-                    first_row = False
+                if not row:
                     continue
-                first_row = False
-                query = row[0].strip()
-                if query:
-                    tasks_added.append(query)
-        elif file.filename.endswith('.json'):
-            json_data = json.loads(file.stream.read().decode("UTF8"))
+                cleaned_row = [str(c).strip() for c in row if c is not None]
+                if not cleaned_row or not any(cleaned_row):
+                    continue
+
+                if first_row:
+                    first_row = False
+                    lower_cols = [c.lower() for c in cleaned_row]
+                    found_header_idx = -1
+
+                    for idx, col in enumerate(lower_cols):
+                        if col in possible_headers or any(h in col for h in ('profile', 'url', 'linkedin', 'name', 'query')):
+                            found_header_idx = idx
+                            break
+
+                    if found_header_idx != -1:
+                        header_col_idx = found_header_idx
+                        continue  # Skip header row
+                    else:
+                        header_col_idx = 0
+
+                if header_col_idx < len(cleaned_row):
+                    val = cleaned_row[header_col_idx].strip()
+                    if val:
+                        tasks_added.append(val)
+
+        elif filename_lower.endswith('.json'):
+            try:
+                text_content = raw_bytes.decode('utf-8-sig')
+            except UnicodeDecodeError:
+                text_content = raw_bytes.decode('latin-1', errors='replace')
+
+            json_data = json.loads(text_content)
+
+            items_to_parse = []
             if isinstance(json_data, list):
-                for item in json_data:
-                    if isinstance(item, dict) and 'query' in item:
-                        tasks_added.append(item['query'])
-                    elif isinstance(item, str):
-                        tasks_added.append(item)
-            elif isinstance(json_data, dict) and 'queries' in json_data:
-                tasks_added.extend(json_data['queries'])
-            else:
-                return jsonify({'success': False, 'error': 'Invalid JSON format. Expected a list of strings or {"queries": [...]}'}), 400
+                items_to_parse = json_data
+            elif isinstance(json_data, dict):
+                for key in ('queries', 'profiles', 'urls', 'data', 'items', 'list', 'names'):
+                    if key in json_data and isinstance(json_data[key], list):
+                        items_to_parse = json_data[key]
+                        break
+                if not items_to_parse:
+                    items_to_parse = [json_data]
+
+            for item in items_to_parse:
+                if isinstance(item, str):
+                    val = item.strip()
+                    if val:
+                        tasks_added.append(val)
+                elif isinstance(item, dict):
+                    for key in ('query', 'url', 'profile_url', 'linkedin_url', 'link', 'name', 'full_name', 'person_name', 'username'):
+                        if key in item and item[key]:
+                            val = str(item[key]).strip()
+                            if val:
+                                tasks_added.append(val)
+                                break
         else:
-            return jsonify({'success': False, 'error': 'Allowed file types are csv, json'}), 400
+            return jsonify({'success': False, 'error': 'Allowed file types are CSV (.csv) and JSON (.json)'}), 400
 
         if not tasks_added:
-            return jsonify({'success': False, 'error': 'No valid queries found in file'}), 400
+            return jsonify({'success': False, 'error': 'No valid names or URLs found in the uploaded file'}), 400
 
         # Add to bucket
         tasks = _load_bucket_queue()
         added = []
         for q in tasks_added:
             q = q.strip()
-            if not q: continue
+            if not q:
+                continue
             detected_type = 'url' if q.startswith('http') else 'name'
             task = {
                 'id': str(_uuid.uuid4()),
@@ -3325,13 +3679,18 @@ def bucket_upload():
         _save_bucket_queue(tasks)
         _broadcast_sse('bucket_tasks_added', {'count': len(added)})
         _ensure_worker_running()
-        
-        return jsonify({'success': True, 'added': len(added), 'message': f'Successfully uploaded and queued {len(added)} tasks.'}), 201
+
+        return jsonify({
+            'success': True,
+            'added': len(added),
+            'message': f'Successfully uploaded and queued {len(added)} task(s) into the queue.'
+        }), 201
 
     except Exception as e:
         import traceback
         traceback.print_exc()
         return jsonify({'success': False, 'error': f'Error processing file: {str(e)}'}), 500
+
 
 
 @app.route('/api/bucket/status', methods=['GET'])
@@ -3464,13 +3823,9 @@ def bucket_remove():
     return jsonify({'success': True})
 
 
-# Auto-start the bucket worker when the server launches so any
-# tasks left in the queue from previous runs continue processing.
-_ensure_worker_running()
-
-
 # Run the Flask app
 if __name__ == '__main__':
     print("Persona - LinkedIn Profile Scraper and Ranker")
     print("http://localhost:5000")
-    app.run(debug=True, host='0.0.0.0', port=5000, threaded=True)
+    # use_reloader=False prevents Flask from spawning duplicate background worker processes
+    app.run(debug=True, use_reloader=False, host='0.0.0.0', port=5000, threaded=True)
