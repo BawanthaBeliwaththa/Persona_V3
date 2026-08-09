@@ -133,29 +133,36 @@
             body {
                 padding: 20px 12px;
             }
+
             .container {
                 max-width: 100%;
             }
+
             header {
                 margin-bottom: 25px;
             }
+
             header h1 {
                 font-size: 1.75rem;
                 flex-direction: column;
                 gap: 6px;
             }
+
             header p {
                 font-size: 0.95rem;
             }
+
             .glass-card {
                 padding: 20px 15px;
                 border-radius: 18px;
                 margin-bottom: 20px;
             }
+
             .tabs {
                 flex-wrap: wrap;
                 gap: 8px;
             }
+
             .tab-btn {
                 flex: 1 1 calc(50% - 6px);
                 text-align: center;
@@ -163,36 +170,44 @@
                 padding: 12px 10px;
                 min-height: 46px;
             }
+
             .input-group-grid {
                 grid-template-columns: 1fr;
                 gap: 12px;
             }
+
             .input-field {
                 font-size: 1rem;
                 padding: 12px 14px;
                 min-height: 48px;
             }
+
             .btn {
                 padding: 14px;
                 min-height: 48px;
                 font-size: 1rem;
             }
+
             .profile-header {
                 flex-direction: column;
                 text-align: center;
                 align-items: center;
             }
+
             .profile-title-details h2 {
                 font-size: 1.4rem;
             }
+
             .avatar {
                 width: 75px;
                 height: 75px;
                 margin: 0 auto 10px;
             }
+
             .timeline-card {
                 padding: 12px;
             }
+
             .section-header {
                 font-size: 1.1rem;
             }
@@ -1001,8 +1016,15 @@
         }
 
         @keyframes fadeInUp {
-            from { opacity: 0; transform: translateY(20px); }
-            to   { opacity: 1; transform: translateY(0); }
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
         }
     </style>
 </head>
@@ -1061,12 +1083,15 @@
                         <input type="text" id="company" class="input-field" placeholder="Company">
                     </div>
 
-                    <div style="margin-top: 15px; border-top: 1px dashed rgba(255,255,255,0.2); padding-top: 15px; width: 100%; grid-column: 1 / -1;">
-                        <h4 style="color:var(--secondary-accent); margin-bottom: 10px; font-size: 0.95rem;"><i class="fas fa-id-card"></i> Contact Info Search (Premium Required)</h4>
+                    <div
+                        style="margin-top: 15px; border-top: 1px dashed rgba(255,255,255,0.2); padding-top: 15px; width: 100%; grid-column: 1 / -1;">
+                        <h4 style="color:var(--secondary-accent); margin-bottom: 10px; font-size: 0.95rem;"><i
+                                class="fas fa-id-card"></i> Contact Info Search (Premium Required)</h4>
                         <div style="display:flex; gap:12px; flex-wrap:wrap;">
                             <div class="input-wrapper" style="flex:1;">
                                 <label>Email</label>
-                                <input type="email" id="contactEmail" class="input-field" placeholder="bawantha@beliwaththa.web.lk">
+                                <input type="email" id="contactEmail" class="input-field"
+                                    placeholder="bawantha@beliwaththa.web.lk">
                             </div>
                             <div class="input-wrapper" style="flex:1;">
                                 <label>Phone</label>
@@ -1074,16 +1099,26 @@
                             </div>
                         </div>
                     </div>
-                    <div style="margin-top: 15px; border-top: 1px dashed rgba(255,255,255,0.2); padding-top: 15px; width: 100%; grid-column: 1 / -1;">
-                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 10px;">
-                            <h4 style="color:var(--secondary-accent); margin: 0; font-size: 0.95rem;"><i class="fas fa-file-upload"></i> Bulk Upload Tasks (CSV or JSON)</h4>
+                    <div
+                        style="margin-top: 15px; border-top: 1px dashed rgba(255,255,255,0.2); padding-top: 15px; width: 100%; grid-column: 1 / -1;">
+                        <div
+                            style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 10px;">
+                            <h4 style="color:var(--secondary-accent); margin: 0; font-size: 0.95rem;"><i
+                                    class="fas fa-file-upload"></i> Bulk Upload Tasks (CSV or JSON)</h4>
                             <div style="font-size: 11px;">
-                                <a href="data:text/csv;charset=utf-8,query%0Ahttps://linkedin.com/in/beliwaththa%0ABawantha%20Beliwaththa" download="template.csv" style="color:var(--secondary-accent); text-decoration: none; margin-right: 10px;"><i class="fas fa-file-csv"></i> CSV Template</a>
-                                <a href="data:application/json;charset=utf-8,%5B%0A%20%20%22https://linkedin.com/in/beliwaththa%22%2C%0A%20%20%22Bawantha%20Beliwaththa%22%0A%5D" download="template.json" style="color:var(--secondary-accent); text-decoration: none;"><i class="fas fa-file-code"></i> JSON Template</a>
+                                <a href="data:text/csv;charset=utf-8,query%0Ahttps://linkedin.com/in/beliwaththa%0ABawantha%20Beliwaththa"
+                                    download="template.csv"
+                                    style="color:var(--secondary-accent); text-decoration: none; margin-right: 10px;"><i
+                                        class="fas fa-file-csv"></i> CSV Template</a>
+                                <a href="data:application/json;charset=utf-8,%5B%0A%20%20%22https://linkedin.com/in/beliwaththa%22%2C%0A%20%20%22Bawantha%20Beliwaththa%22%0A%5D"
+                                    download="template.json"
+                                    style="color:var(--secondary-accent); text-decoration: none;"><i
+                                        class="fas fa-file-code"></i> JSON Template</a>
                             </div>
                         </div>
                         <div style="display:flex; gap:12px; align-items: center; flex-wrap:wrap;">
-                            <input type="file" id="clientUploadFile" accept=".csv,.json" class="input-field" style="flex:1; padding: 10px; background: rgba(0,0,0,0.2);">
+                            <input type="file" id="clientUploadFile" accept=".csv,.json" class="input-field"
+                                style="flex:1; padding: 10px; background: rgba(0,0,0,0.2);">
                         </div>
                     </div>
 
@@ -1286,7 +1321,8 @@
         <div class="search-history-card" id="searchHistorySection">
             <div class="search-history-header">
                 <h3><i class="fas fa-clock-rotate-left"></i> My Searches</h3>
-                <button class="btn-clear-history" onclick="clearSearchHistory()" id="btnClearHistory" style="display:none;">
+                <button class="btn-clear-history" onclick="clearSearchHistory()" id="btnClearHistory"
+                    style="display:none;">
                     <i class="fas fa-trash-alt"></i> Clear History
                 </button>
             </div>
@@ -1369,7 +1405,7 @@
                 const company = document.getElementById('company').value.trim();
                 const contactEmail = document.getElementById('contactEmail') ? document.getElementById('contactEmail').value.trim() : '';
                 const contactPhone = document.getElementById('contactPhone') ? document.getElementById('contactPhone').value.trim() : '';
-                
+
                 const btn = document.getElementById('btnDirectSearchExtract');
 
                 if (contactEmail || contactPhone) {
@@ -1379,7 +1415,7 @@
 
                     try {
                         const res = await fetch('/api/scraper/search-contact-info', {
-                            method: 'POST', headers: {'Content-Type':'application/json'},
+                            method: 'POST', headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ email: contactEmail, phone: contactPhone })
                         });
                         const data = await res.json();
@@ -1389,7 +1425,7 @@
                             if (data.results && data.results.length > 0) {
                                 const url = data.results[0].profile_url;
                                 const bRes = await fetch('/api/client/scrape', {
-                                    method: 'POST', headers: {'Content-Type':'application/json'},
+                                    method: 'POST', headers: { 'Content-Type': 'application/json' },
                                     body: JSON.stringify({ name: url }) // Queue the found URL
                                 });
                                 const bData = await bRes.json();
@@ -1404,7 +1440,7 @@
                                     const searchName = contactEmail || contactPhone;
                                     renderBulkProfiles(bData.profiles, searchName);
                                     showSearchSuccess(`Loaded contact profile from cache.`);
-                                    addToSearchHistory(searchName, bData.reference_number, 'completed', {profiles_count: bData.profiles.length});
+                                    addToSearchHistory(searchName, bData.reference_number, 'completed', { profiles_count: bData.profiles.length });
                                     btn.disabled = false;
                                     btn.innerHTML = '<i class="fas fa-download"></i> Search &amp; Extract All';
                                 } else {
@@ -1449,7 +1485,7 @@
                         renderBulkProfiles(data.profiles, searchName);
                         showSearchSuccess(`Loaded ${data.profiles.length} profiles from cache.`);
                         if (data.reference_number) showRefBadge(data.reference_number);
-                        addToSearchHistory(searchName, data.reference_number, 'completed', {profiles_count: data.profiles.length});
+                        addToSearchHistory(searchName, data.reference_number, 'completed', { profiles_count: data.profiles.length });
                         btn.disabled = false;
                         btn.innerHTML = '<i class="fas fa-download"></i> Search &amp; Extract All';
 
@@ -1501,10 +1537,10 @@
                 const file = fileInput.files[0];
                 const formData = new FormData();
                 formData.append('file', file);
-                
+
                 const btn = isMainButton ? document.getElementById('btnDirectSearchExtract') : document.getElementById('btnClientUpload');
                 if (!btn) return;
-                
+
                 btn.disabled = true;
                 const originalText = btn.innerHTML;
                 btn.innerHTML = '<i class="fas fa-spinner spinner"></i> Uploading...';
@@ -1551,7 +1587,7 @@
                         }
                         showSearchInfo(`<i class="fas fa-clock"></i> <strong>Queued</strong> — waiting for current task to finish...${posHtml}`);
                         btn.innerHTML = `<i class="fas fa-clock"></i> Queue #${pos}`;
-                        updateSearchHistory(name, 'pending', taskId, {queue_position: pos, queue_total: total});
+                        updateSearchHistory(name, 'pending', taskId, { queue_position: pos, queue_total: total });
 
                     } else if (res.status === 202 && data.status === 'in_progress') {
                         showSearchInfo('<i class="fas fa-spinner spinner"></i> <strong>Scraping now</strong> — the worker is extracting LinkedIn profiles...');
@@ -1566,7 +1602,7 @@
                         btn.disabled = false;
                         btn.innerHTML = '<i class="fas fa-download"></i> Search &amp; Extract All';
                         document.getElementById('btnQueueAnother').style.display = 'none';
-                        updateSearchHistory(name, 'completed', taskId, {profiles_count: data.profiles.length});
+                        updateSearchHistory(name, 'completed', taskId, { profiles_count: data.profiles.length });
 
                     } else if (data.status === 'failed') {
                         clearInterval(currentPollInterval);
@@ -1575,7 +1611,7 @@
                         btn.disabled = false;
                         btn.innerHTML = '<i class="fas fa-download"></i> Search &amp; Extract All';
                         document.getElementById('btnQueueAnother').style.display = 'none';
-                        updateSearchHistory(name, 'failed', taskId, {error: data.error});
+                        updateSearchHistory(name, 'failed', taskId, { error: data.error });
 
                     } else {
                         clearInterval(currentPollInterval);
@@ -1597,23 +1633,23 @@
                     clearInterval(currentPollInterval);
                     currentPollInterval = null;
                 }
-                
+
                 // Clear the inputs
                 document.getElementById('usernameKeyword').value = '';
                 document.getElementById('firstName').value = '';
                 document.getElementById('lastName').value = '';
                 document.getElementById('company').value = '';
-                
+
                 // Reset buttons
                 const btn = document.getElementById('btnDirectSearchExtract');
                 btn.disabled = false;
                 btn.innerHTML = '<i class="fas fa-download"></i> Search &amp; Extract All';
                 document.getElementById('btnQueueAnother').style.display = 'none';
-                
+
                 // Clear the status text and ref badge
                 document.getElementById('searchStatus').innerHTML = '';
                 document.getElementById('refBadgeContainer').classList.remove('show');
-                
+
                 showSearchInfo('Ready to add another search to the queue! You can monitor the previous search progress in the "My Searches" section below.');
             }
 
@@ -1739,8 +1775,9 @@
                 // Scroll to reference section
                 document.querySelector('.ref-search-card').scrollIntoView({ behavior: 'smooth' });
 
-                // Store profiles on a module-level variable so download fns can access them
+                // Store profiles on module-level variables so download fns can access them
                 window._refLookupProfiles = profiles;
+                activeBulkData = profiles;
 
                 // Show inline success banner with metadata + download buttons
                 const panel = document.getElementById('refResultPanel');
@@ -1920,7 +1957,9 @@
 
             function renderProfile(profile) {
                 activeProfileData = profile;
-                activeBulkData = null;
+                if (!activeBulkData || !activeBulkData.length) {
+                    activeBulkData = [profile];
+                }
 
                 // Reset JSON boxes
                 document.querySelectorAll('.section-json-box').forEach(box => {
@@ -1975,7 +2014,7 @@
                 const currentJobSec = document.getElementById('currentJobSection');
                 const currentJobCont = document.getElementById('currentJobContainer');
                 if (contactHtml || (profile.current_job && (profile.current_job.title || profile.current_job.company))) {
-                    let jobHtml = contactHtml; 
+                    let jobHtml = contactHtml;
                     if (profile.current_job && (profile.current_job.title || profile.current_job.company)) {
                         let job = profile.current_job;
                         jobHtml += `
@@ -2087,7 +2126,6 @@
 
             function renderBulkProfiles(profiles, searchName) {
                 activeBulkData = profiles;
-                activeProfileData = null;
 
                 let extractedListHtml = '';
                 profiles.forEach((p, idx) => {
@@ -2120,6 +2158,18 @@
                     <h3 style="font-size: 1.5rem; margin-bottom: 10px;">Scrape Complete for "${escapeHtml(searchName || 'Multi-Profile Search')}"</h3>
                     <p style="color: var(--text-muted); font-size: 1.1rem; margin-bottom: 20px;">Successfully extracted ${profiles.length} profile${profiles.length === 1 ? '' : 's'}. Click on any profile card below to view details, or use the download options.</p>
                     
+                    <div style="display:flex; justify-content:center; gap:12px; margin-bottom:25px; flex-wrap:wrap;">
+                        <button class="btn" onclick="exportBulkCSV()" style="padding:10px 20px; font-size:0.9rem; background:rgba(16,185,129,0.15); border:1px solid rgba(16,185,129,0.4); color:#6ee7b7; cursor:pointer; border-radius:10px; display:inline-flex; align-items:center; gap:8px;">
+                            <i class="fas fa-file-csv"></i> Download CSV
+                        </button>
+                        <button class="btn" onclick="exportBulkJSON()" style="padding:10px 20px; font-size:0.9rem; background:rgba(99,102,241,0.15); border:1px solid rgba(99,102,241,0.4); color:#c7d2fe; cursor:pointer; border-radius:10px; display:inline-flex; align-items:center; gap:8px;">
+                            <i class="fas fa-file-code"></i> Export JSON
+                        </button>
+                        <button class="btn" onclick="exportBulkPDF()" style="padding:10px 20px; font-size:0.9rem; background:rgba(239,68,68,0.15); border:1px solid rgba(239,68,68,0.4); color:#fca5a5; cursor:pointer; border-radius:10px; display:inline-flex; align-items:center; gap:8px;">
+                            <i class="fas fa-file-pdf"></i> Download PDF
+                        </button>
+                    </div>
+
                     <div style="text-align:left; max-width: 650px; margin: 0 auto; background: rgba(0,0,0,0.2); border-radius:12px; padding:20px; border:1px solid rgba(255,255,255,0.05);">
                         <h4 style="margin-top:0; margin-bottom:15px; color:#c7d2fe; border-bottom:1px solid rgba(255,255,255,0.1); padding-bottom:10px;">Extracted Profiles (Click to Expand Details)</h4>
                         ${extractedListHtml}
@@ -2130,7 +2180,7 @@
                 document.getElementById('bulkResult').scrollIntoView({ behavior: 'smooth' });
             }
 
-            window.viewSingleProfileFromBulk = function(profileUrl) {
+            window.viewSingleProfileFromBulk = function (profileUrl) {
                 const profiles = activeBulkData || window._refLookupProfiles || [];
                 const matched = profiles.find(p => p.profile_url === profileUrl);
                 if (matched) {
@@ -2172,11 +2222,12 @@
 
             // Export handlers
             async function exportData(format, isBulk = false) {
-                const data = isBulk ? { profiles: activeBulkData } : { profiles: [activeProfileData] };
-                if (!data.profiles || !data.profiles[0]) {
+                const profiles = isBulk ? (activeBulkData || window._refLookupProfiles || (activeProfileData ? [activeProfileData] : [])) : (activeProfileData ? [activeProfileData] : (activeBulkData || window._refLookupProfiles));
+                if (!profiles || !profiles.length) {
                     showSearchError('No data to export');
                     return;
                 }
+                const data = { profiles };
                 try {
                     const res = await fetch('/api/scraper/export', {
                         method: 'POST',
@@ -2188,7 +2239,7 @@
                         const url = URL.createObjectURL(blob);
                         const a = document.createElement('a');
                         a.href = url;
-                        a.download = `linkedin_export_${isBulk ? 'bulk' : 'profile'}.${format}`;
+                        a.download = `linkedin_export_${isBulk || profiles.length > 1 ? 'bulk' : 'profile'}.${format}`;
                         document.body.appendChild(a);
                         a.click();
                         document.body.removeChild(a);
@@ -2204,19 +2255,23 @@
             function exportJSON() { exportData('json', false); }
             function exportCSV() { exportData('csv', false); }
             async function exportPDF() {
-                if (!activeProfileData) { showSearchError('No profile loaded to export.'); return; }
+                const profiles = activeProfileData ? [activeProfileData] : (activeBulkData || window._refLookupProfiles);
+                if (!profiles || !profiles.length) { showSearchError('No profile loaded to export.'); return; }
+                const isBulk = profiles.length > 1;
+                const endpoint = isBulk ? '/api/export-bulk-pdf' : '/api/export-profile-pdf';
+                const body = isBulk ? { profiles } : { profile: profiles[0] };
                 try {
-                    const res = await fetch('/api/export-profile-pdf', {
+                    const res = await fetch(endpoint, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ profile: activeProfileData })
+                        body: JSON.stringify(body)
                     });
                     if (res.ok) {
                         const blob = await res.blob();
                         const url = URL.createObjectURL(blob);
                         const a = document.createElement('a');
                         a.href = url;
-                        a.download = `${(activeProfileData.name || 'profile').replace(/\s+/g, '_')}_profile.pdf`;
+                        a.download = isBulk ? `bulk_profiles_export.pdf` : `${(profiles[0].name || 'profile').replace(/\s+/g, '_')}_profile.pdf`;
                         document.body.appendChild(a);
                         a.click();
                         document.body.removeChild(a);
@@ -2234,12 +2289,13 @@
             function exportBulkJSON() { exportData('json', true); }
             function exportBulkCSV() { exportData('csv', true); }
             async function exportBulkPDF() {
-                if (!activeBulkData || !activeBulkData.length) { showSearchError('No bulk profiles loaded.'); return; }
+                const profiles = activeBulkData || window._refLookupProfiles || (activeProfileData ? [activeProfileData] : []);
+                if (!profiles || !profiles.length) { showSearchError('No bulk profiles loaded.'); return; }
                 try {
                     const res = await fetch('/api/export-bulk-pdf', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ profiles: activeBulkData })
+                        body: JSON.stringify({ profiles })
                     });
                     if (res.ok) {
                         const blob = await res.blob();
@@ -2439,7 +2495,7 @@
                 // Fallback: fetch by name via scrape-status
                 try {
                     const url = '/api/client/scrape-status?name=' + encodeURIComponent(item.name)
-                              + (ref ? '&task_id=' + encodeURIComponent(ref) : '');
+                        + (ref ? '&task_id=' + encodeURIComponent(ref) : '');
                     const res = await fetch(url);
                     const data = await res.json();
                     if (data.profiles && data.profiles.length) {
@@ -2491,9 +2547,9 @@
                         const data = await res.json();
 
                         if (data.status === 'completed' && data.profiles) {
-                            updateSearchHistory(item.name, 'completed', item.ref, {profiles_count: data.profiles.length});
+                            updateSearchHistory(item.name, 'completed', item.ref, { profiles_count: data.profiles.length });
                         } else if (data.status === 'failed') {
-                            updateSearchHistory(item.name, 'failed', item.ref, {error: data.error});
+                            updateSearchHistory(item.name, 'failed', item.ref, { error: data.error });
                         } else if (data.status === 'pending' || data.status === 'in_progress') {
                             updateSearchHistory(item.name, data.status, item.ref, {
                                 queue_position: data.queue_position,
