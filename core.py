@@ -86,12 +86,400 @@ _DURATION_RE = re.compile(
 )
 
 
+_LINKEDIN_FOOTER_TOKENS = {
+    'accessibility', 'talent solutions', 'community guidelines', 'careers',
+    'marketing solutions', 'privacy & terms', 'ad choices', 'advertising',
+    'sales solutions', 'mobile', 'small business', 'safety center',
+    'linkedin corporation', 'questions?', 'manage your account and privacy',
+    'go to your settings.', 'recommendation transparency',
+    'learn more about recommended content.', 'select language',
+    'visit our help center.', 'about',
+    # LinkedIn language names that appear in "select language" dropdown
+    'العربية (arabic)', 'বাংলা (bangla)', 'čeština (czech)', 'dansk (danish)',
+    'deutsch (german)', 'ελληνικά (greek)', 'english (english)',
+    'español (spanish)', 'فارسی (persian)', 'suomi (finnish)',
+    'français (french)', 'हिंदी (hindi)', 'magyar (hungarian)',
+    'bahasa indonesia (indonesian)', 'italiano (italian)', 'עברית (hebrew)',
+    '日本語 (japanese)', '한국어 (korean)', 'मराठी (marathi)',
+    'bahasa malaysia (malay)', 'nederlands (dutch)', 'norsk (norwegian)',
+    'ਪੰਜਾਬੀ (punjabi)', 'polski (polish)', 'português (portuguese)',
+    'română (romanian)', 'русский (russian)', 'svenska (swedish)',
+    'తెలుగు (telugu)', 'ภาษาไทย (thai)', 'tagalog (tagalog)',
+    'türkçe (turkish)', 'українська (ukrainian)', 'tiếng việt (vietnamese)',
+    '简体中文 (chinese (simplified))', '正體中文 (chinese (traditional))',
+    # Common garbage strings scraped from skills/project associations
+    'show credential', 'badge',
+}
+
+# Known real language names (to allow in the languages section)
+_REAL_LANGUAGE_NAMES = {
+    'english', 'sinhalese', 'sinhala', 'tamil', 'french', 'german',
+    'spanish', 'portuguese', 'italian', 'dutch', 'russian', 'chinese',
+    'japanese', 'korean', 'arabic', 'hindi', 'urdu', 'bengali',
+    'malay', 'indonesian', 'turkish', 'polish', 'swedish', 'norwegian',
+    'danish', 'finnish', 'greek', 'hebrew', 'thai', 'vietnamese',
+    'tagalog', 'punjabi', 'marathi', 'telugu', 'ukrainian', 'romanian',
+    'czech', 'hungarian', 'persian', 'farsi',
+}
+
+_JUNK_SUBSTRINGS = [
+    'select language', 'help center', 'manage your account', 'go to your settings',
+    'recommendation transparency', 'recommended content', 'linkedin corporation',
+    'talent solutions', 'community guidelines', 'privacy & terms', 'ad choices',
+    'marketing solutions', 'sales solutions', 'safety center', 'small business',
+    'accessibility', 'visit our help center', 'questions?', 'show credential'
+]
+
+_LANG_DROPDOWN_RE = re.compile(
+    r'\(\s*(arabic|bangla|czech|danish|german|greek|english|spanish|persian|'
+    r'finnish|french|hindi|hungarian|indonesian|italian|hebrew|japanese|'
+    r'korean|marathi|malay|dutch|norwegian|punjabi|polish|portuguese|'
+    r'romana|românia|romanian|russian|swedish|telugu|thai|tagalog|turkish|'
+    r'ukrainian|vietnamese|chinese)\b',
+    re.I
+)
+
+def _is_junk_text(text: str) -> bool:
+    """Return True if the string is recognised LinkedIn footer/UI garbage."""
+    if not text:
+        return False
+    t = text.strip().lower()
+    if t in _LINKEDIN_FOOTER_TOKENS:
+        return True
+    if any(j in t for j in _JUNK_SUBSTRINGS):
+        return True
+    if _LANG_DROPDOWN_RE.search(t):
+        return True
+    return False
+
+def _is_junk_entry(entry) -> bool:
+    """Return True if a dict entry looks like scraped UI garbage, not real content."""
+    if not isinstance(entry, dict):
+        return False
+    values = [str(v).strip() for v in entry.values() if v]
+    if values and any(_is_junk_text(v) for v in values):
+        return True
+    for key in ('duration', 'date', 'dates'):
+        v = entry.get(key, '')
+        if v and _is_junk_text(str(v)):
+            return True
+    return False
+
+def _is_real_language(lang_name: str) -> bool:
+    """True only if the name looks like a real human language, not a nav item."""
+    if not lang_name:
+        return False
+    t = lang_name.strip().lower()
+    if t in _REAL_LANGUAGE_NAMES:
+        return True
+    if _is_junk_text(t):
+        return False
+    junk_indicators = [
+        'solutions', 'guidelines', 'corporation', 'accessibility',
+        'advertising', 'privacy', 'terms', 'choices', 'credential',
+        'settings', 'transparency', 'center', 'questions', 'careers',
+    ]
+    for ind in junk_indicators:
+        if ind in t:
+            return False
+    return False
+
+def _clean_about(about_text: str) -> str:
+    """Strip the LinkedIn footer/language-selector content and 'more...' artifacts from the About field."""
+    if not about_text:
+        return ''
+
+    lines = about_text.split('\n')
+    clean_lines = []
+    for ln in lines:
+        s = ln.strip()
+        if not s:
+            continue
+        if _is_junk_text(s):
+            break
+        s = s.replace('… more', '').replace('...more', '').replace('more...', '').replace('…', '')
+        if s.lower() in ('about', 'see more', 'show more'):
+            continue
+        clean_lines.append(s)
+    res = '\n'.join(clean_lines).strip()
+    for junk in ['… more', '...more', '... more', '…more', 'more...', '... see more', 'see more', '…']:
+        if res.endswith(junk):
+            res = res[:-len(junk)].strip()
+    return res
+
+def _clean_experience_list(exp_list):
+    """Remove junk entries from experience; keep only real jobs."""
+    if not exp_list:
+        return []
+    result = []
+    seen = set()
+    for e in exp_list:
+        if not isinstance(e, dict):
+            continue
+        if _is_junk_entry(e):
+            continue
+        title   = (e.get('title') or '').strip()
+        company = (e.get('company') or '').strip()
+        if _is_junk_text(title) or _is_junk_text(company):
+            continue
+        if not title and not company:
+            continue
+        key = (title.lower(), company.lower())
+        if key in seen:
+            continue
+        seen.add(key)
+        result.append(e)
+    return result
+
+def _clean_education_list(edu_list):
+    """Remove junk entries from education/qualifications."""
+    if not edu_list:
+        return []
+    result = []
+    seen = set()
+    for e in edu_list:
+        if not isinstance(e, dict):
+            continue
+        if _is_junk_entry(e):
+            continue
+        inst   = (e.get('institution') or '').strip()
+        degree = (e.get('degree') or '').strip()
+        if _is_junk_text(inst) or _is_junk_text(degree):
+            continue
+        if not inst and not degree:
+            continue
+        if inst.lower().startswith('skills:') or degree.lower().startswith('skills:'):
+            continue
+        key = (inst.lower(), degree.lower())
+        if key in seen:
+            continue
+        seen.add(key)
+        result.append(e)
+    return result
+
+def _clean_certification_list(cert_list):
+    """Remove junk entries from certifications."""
+    if not cert_list:
+        return []
+    result = []
+    seen = set()
+    for c in cert_list:
+        if not isinstance(c, dict):
+            continue
+        if _is_junk_entry(c):
+            continue
+        name   = (c.get('name') or '').strip()
+        issuer = (c.get('issuer') or '').strip()
+        if _is_junk_text(name) or _is_junk_text(issuer):
+            continue
+        if name.lower() in ('show credential', 'badge', ''):
+            continue
+        if issuer.lower().startswith('skills:'):
+            continue
+        key = name.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        result.append(c)
+    return result
+
+def _clean_languages_list(lang_list):
+    """Keep only real human languages, discard footer-nav garbage."""
+    if not lang_list:
+        return []
+    result = []
+    seen = set()
+    for l in lang_list:
+        if not isinstance(l, dict):
+            continue
+        lang_name = (l.get('language') or '').strip()
+        if not lang_name:
+            continue
+        if not _is_real_language(lang_name):
+            continue
+        key = lang_name.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        result.append(l)
+    return result
+
+def _clean_honors_list(hon_list):
+    """Remove junk entries from honors/awards."""
+    if not hon_list:
+        return []
+    result = []
+    seen = set()
+    for h in hon_list:
+        if not isinstance(h, dict):
+            continue
+        if _is_junk_entry(h):
+            continue
+        title  = (h.get('title') or '').strip()
+        issuer = (h.get('issuer') or '').strip()
+        if _is_junk_text(title) or _is_junk_text(issuer):
+            continue
+        if not title:
+            continue
+        key = title.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        result.append(h)
+    return result
+
+def _clean_recommendations_list(rec_list):
+    """Remove junk entries from recommendations."""
+    if not rec_list:
+        return []
+    result = []
+    for r in rec_list:
+        if not isinstance(r, dict):
+            continue
+        if _is_junk_entry(r):
+            continue
+        recommender = (r.get('recommender') or '').strip()
+        text_val    = (r.get('text') or '').strip()
+        title       = (r.get('title') or '').strip()
+        if _is_junk_text(recommender) or _is_junk_text(title):
+            continue
+        if "haven't received" in recommender.lower() or 'try asking' in title.lower():
+            continue
+        if not recommender and not text_val:
+            continue
+        result.append(r)
+    return result
+
+def _clean_skills_list(skills_list):
+    """Deduplicate and remove junk from skills list."""
+    if not skills_list:
+        return []
+    seen = set()
+    result = []
+    for s in skills_list:
+        if isinstance(s, dict):
+            name = (s.get('skill') or s.get('name') or '').strip()
+        elif isinstance(s, str):
+            name = s.strip()
+        else:
+            continue
+        if not name:
+            continue
+        if _is_junk_text(name):
+            continue
+        if len(name) > 80:
+            continue
+        if ' at ' in name.lower() and 'intern' in name.lower():
+            continue
+        key = name.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        result.append({'skill': name})
+    return result
+
+def _clean_volunteer_list(vol_list):
+    """Remove junk entries from volunteer experience (e.g. LinkedIn footer links & language pickers)."""
+    if not vol_list:
+        return []
+    result = []
+    seen = set()
+    junk_indicators = [
+        'questions?', 'manage your account', 'recommendation transparency',
+        'help center', 'settings', 'recommended content', 'select language',
+        'mobile', 'visit our help center.'
+    ]
+    for v in vol_list:
+        if not isinstance(v, dict):
+            continue
+        if _is_junk_entry(v):
+            continue
+        role = (v.get('role') or '').strip()
+        org  = (v.get('organization') or v.get('company') or '').strip()
+        if _is_junk_text(role) or _is_junk_text(org):
+            continue
+        if not role and not org:
+            continue
+        r_low = role.lower()
+        o_low = org.lower()
+        if any(ind in r_low or ind in o_low for ind in junk_indicators):
+            continue
+        if ('(' in o_low and ')' in o_low) or ('(' in r_low and ')' in r_low):
+            continue
+        if _is_real_language(org) or _is_real_language(role):
+            continue
+        key = (role.lower(), org.lower())
+        if key in seen:
+            continue
+        seen.add(key)
+        result.append(v)
+    return result
+
+def sanitize_profile(profile):
+    """
+    Deep-clean a raw scraped profile:
+    - Strips LinkedIn footer/nav junk from every section
+    - Removes null/empty values
+    - Deduplicates skills
+    - Cleans the About text
+    Returns a new dict with only real data.
+    """
+    if not profile or not isinstance(profile, dict):
+        return {}
+
+    p = dict(profile)
+
+    # Clean About field
+    p['about'] = _clean_about(p.get('about', '') or '')
+
+    # Clean list sections
+    p['experience']      = _clean_experience_list(p.get('experience') or p.get('experiences') or [])
+    p['experiences']     = p['experience']
+    p['qualifications']  = _clean_education_list(p.get('qualifications') or p.get('education') or [])
+    p['education']       = p['qualifications']
+    p['certifications']  = _clean_certification_list(p.get('certifications') or [])
+    p['languages']       = _clean_languages_list(p.get('languages') or [])
+    p['honors']          = _clean_honors_list(p.get('honors') or [])
+    p['recommendations'] = _clean_recommendations_list(p.get('recommendations') or [])
+    p['skills']          = _clean_skills_list(p.get('skills') or [])
+    p['volunteer']       = _clean_volunteer_list(p.get('volunteer') or [])
+    p['contact_info']    = p.get('contact_info') or {}
+
+    # Clean current_job
+    cj = p.get('current_job')
+    if cj and isinstance(cj, dict):
+        if _is_junk_entry(cj):
+            p['current_job'] = {}
+
+    # Remove empty string / null top-level fields
+    for field in ('name', 'headline', 'location', 'profile_url', 'profile_picture',
+                  'connections', 'scraped_at'):
+        v = p.get(field)
+        if v is not None and isinstance(v, str):
+            cleaned = v.strip()
+            if cleaned.lower() in ('none', 'null', 'n/a', 'na', ''):
+                p[field] = ''
+            else:
+                p[field] = cleaned
+
+    # Remove empty lists/dicts to keep JSON output clean
+    for k in list(p.keys()):
+        v = p[k]
+        if v == [] or v == {} or v == '':
+            if k not in ('name',):
+                del p[k]
+
+    return p
+
+clean_profile = sanitize_profile
+
+
 def _is_noise(line: str) -> bool:
     """Return True if the line is UI chrome, not real profile text."""
     s = line.strip()
     if not s:
         return True
-    if s in _UI_NOISE:
+    if s in _UI_NOISE or _is_junk_text(s):
         return True
     if any(p.search(s) for p in _UI_NOISE_PATTERNS):
         return True
@@ -110,6 +498,7 @@ def _looks_like_proficiency(line: str) -> bool:
     return any(kw in lower for kw in _PROFICIENCY_KW)
 
 
+
 # Core LinkedIn Scraper Class
 class LinkedInScraper:
     def __init__(self, headless: bool = False, browser_type: str = "chromium", session_name: str = "default"):
@@ -123,6 +512,10 @@ class LinkedInScraper:
         self.stats = {'requests_made': 0, 'profiles_scraped': 0, 'errors': 0, 'start_time': None, 'runtime_seconds': 0}
         self.user_data_dir = Path(f"./browser_data/{session_name}")
         self.user_data_dir.mkdir(parents=True, exist_ok=True)
+
+    def sanitize_profile(self, profile):
+        """Sanitize profile using global cleaner."""
+        return sanitize_profile(profile)
 
     # ── Static helpers for lock cleanup ──────────────────────────────────────
     _LOCK_PATTERNS = ['SingletonLock', 'SingletonCookie', 'SingletonSocket']
@@ -304,8 +697,42 @@ class LinkedInScraper:
         return self
 
 
+    async def ensure_active_page(self):
+        """Ensure that the browser, context, and page are alive and responsive before performing operations."""
+        try:
+            if not self.context or not self.playwright:
+                print("[LinkedInScraper] No active context/playwright. Initializing...")
+                await self.initialize()
+                return
+
+            is_page_closed = False
+            try:
+                if not self.page or self.page.is_closed():
+                    is_page_closed = True
+                else:
+                    _ = self.page.url
+            except Exception:
+                is_page_closed = True
+
+            if is_page_closed:
+                print("[LinkedInScraper] Main page is closed or target context destroyed. Restoring page...")
+                if self.context and self.context.pages:
+                    self.page = self.context.pages[0]
+                elif self.context:
+                    self.page = await self.context.new_page()
+                    await self.context.add_init_script("""
+                        Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
+                        window.chrome = { runtime: {} };
+                    """)
+                else:
+                    await self.initialize()
+        except Exception as e:
+            print(f"[LinkedInScraper] Error in ensure_active_page, re-initializing session: {e}")
+            await self.initialize()
+
     async def check_auth(self) -> bool:
         """Actively check if the current browser session is authenticated on LinkedIn."""
+        await self.ensure_active_page()
         if not self.page or not self.context:
             self.is_authenticated = False
             return False
@@ -321,7 +748,8 @@ class LinkedInScraper:
             if 'feed' in base_url and 'login' not in base_url and 'checkpoint' not in base_url:
                 self.is_authenticated = True
                 return True
-        except Exception:
+        except Exception as e:
+            print(f"[LinkedInScraper] check_auth exception: {e}")
             pass
         self.is_authenticated = False
         return False
@@ -431,6 +859,7 @@ class LinkedInScraper:
         MAX_RETRIES = 2
         print(f"Extracting: {profile_url}" + (f" (retry {_retry})" if _retry else ""))
         try:
+            await self.ensure_active_page()
             # Step 1: Load main profile page
             await self.page.goto(profile_url, wait_until='domcontentloaded', timeout=60000)
             await asyncio.sleep(4)
@@ -720,9 +1149,10 @@ class LinkedInScraper:
         except Exception as e:
             err_msg = str(e)
             print(f"Extraction error: {err_msg}")
-            if _retry < MAX_RETRIES and ('context' in err_msg.lower() or 'navigation' in err_msg.lower()):
-                print(f"Retrying ({_retry + 1}/{MAX_RETRIES})...")
-                await asyncio.sleep(3)
+            if _retry < MAX_RETRIES and any(k in err_msg.lower() for k in ['context', 'navigation', 'closed', 'target', 'crashed']):
+                print(f"Browser context/page issue detected. Re-initializing page and retrying ({_retry + 1}/{MAX_RETRIES})...")
+                await asyncio.sleep(2)
+                await self.ensure_active_page()
                 return await self.extract_profile(profile_url, _retry=_retry + 1)
             self.stats['errors'] += 1
             return {'profile_url': profile_url, 'error': err_msg}
@@ -1095,9 +1525,10 @@ class LinkedInScraper:
                 i += 1
 
             # Only accept lines that look like actual language names
-            # (short, mostly alphabetical, not a duration or number)
+            # (short, mostly alphabetical, not a duration or number, and is a real human language)
             if lang and len(lang) < 60 and not _looks_like_duration(lang) and not lang.isdigit():
-                entries.append({'language': lang, 'proficiency': proficiency})
+                if _is_real_language(lang):
+                    entries.append({'language': lang, 'proficiency': proficiency})
 
         return entries
 
@@ -1287,105 +1718,128 @@ class LinkedInScraper:
     # ── Search methods ──────────────────────────────────────────────────────
 
     async def search_people(self, first_name: str, last_name: str, company: str = "",
-                             max_results: int = 10, force_search: bool = False) -> List[Dict]:
-        if not self.is_authenticated:
-            raise Exception("Not authenticated")
-        query = " ".join(filter(None, [first_name, last_name, company]))
-        if not query:
-            return []
-        import urllib.parse
-        encoded = urllib.parse.quote(query)
-        url = f"https://www.linkedin.com/search/results/people/?keywords={encoded}"
+                             max_results: int = 10, force_search: bool = False, _retry: int = 0) -> List[Dict]:
+        MAX_RETRIES = 2
         try:
-            await self.page.goto(url, wait_until='domcontentloaded', timeout=60000)
-        except Exception as e:
-            print(f"Warning: Search page navigation timed out or encountered error: {e}. Attempting to parse elements anyway...")
+            await self.ensure_active_page()
+            if not self.is_authenticated:
+                raise Exception("Not authenticated")
+            query = " ".join(filter(None, [first_name, last_name, company]))
+            if not query:
+                return []
+            import urllib.parse
+            encoded = urllib.parse.quote(query)
+            url = f"https://www.linkedin.com/search/results/people/?keywords={encoded}"
+            try:
+                await self.page.goto(url, wait_until='domcontentloaded', timeout=60000)
+            except Exception as e:
+                print(f"Warning: Search page navigation encountered error: {e}")
+                if self.page.is_closed() or any(k in str(e).lower() for k in ["closed", "target", "context"]):
+                    raise e
+                print("Attempting to parse elements anyway...")
 
-        await asyncio.sleep(3)
+            await asyncio.sleep(3)
 
-        for _ in range(4):
-            await self.page.evaluate('window.scrollBy(0, 800)')
-            await asyncio.sleep(1)
-        html_content = await self.page.content()
-        with open("search_debug.html", "w", encoding="utf-8") as f:
-            f.write(html_content)
+            for _ in range(4):
+                try:
+                    await self.page.evaluate('window.scrollBy(0, 800)')
+                except Exception as se:
+                    if self.page.is_closed() or any(k in str(se).lower() for k in ["closed", "target", "context"]):
+                        raise se
+                await asyncio.sleep(1)
 
-        results = await self.page.evaluate('''() => {
-            const res = [];
-            const seen = new Set();
-            const containers = document.querySelectorAll('li.reusable-search__result-container, .entity-result__item');
-            if (containers.length > 0) {
-                for (let card of containers) {
-                    let a = card.querySelector('a[href*="/in/"]');
-                    if (!a) continue;
-                    let href = a.getAttribute('href');
-                    if (!href || href.includes('/search/')) continue;
-                    let url = href.split('?')[0];
-                    if (!url.startsWith('http')) url = 'https://www.linkedin.com' + url;
-                    if (!seen.has(url)) {
-                        seen.add(url);
-                        let nameEl = card.querySelector('.entity-result__title-text a, .entity-result__title-text') || a;
-                        let name = nameEl.innerText.trim().split('\\n')[0];
-                        if (!name) name = url.split('/in/')[1] || '';
-                        let img = '';
-                        let imgs = card.querySelectorAll('img');
-                        for (let im of imgs) {
-                            let src = im.src || im.getAttribute('data-delayed-url') || '';
-                            if (src && src.includes('licdn.com')) {
-                                if (!src.includes('company-logo') && !src.includes('ghost-person')) {
-                                    img = src;
-                                    break;
+            try:
+                html_content = await self.page.content()
+                with open("search_debug.html", "w", encoding="utf-8") as f:
+                    f.write(html_content)
+            except Exception:
+                pass
+
+            results = await self.page.evaluate('''() => {
+                const res = [];
+                const seen = new Set();
+                const containers = document.querySelectorAll('li.reusable-search__result-container, .entity-result__item');
+                if (containers.length > 0) {
+                    for (let card of containers) {
+                        let a = card.querySelector('a[href*="/in/"]');
+                        if (!a) continue;
+                        let href = a.getAttribute('href');
+                        if (!href || href.includes('/search/')) continue;
+                        let url = href.split('?')[0];
+                        if (!url.startsWith('http')) url = 'https://www.linkedin.com' + url;
+                        if (!seen.has(url)) {
+                            seen.add(url);
+                            let nameEl = card.querySelector('.entity-result__title-text a, .entity-result__title-text') || a;
+                            let name = nameEl.innerText.trim().split('\\n')[0];
+                            if (!name) name = url.split('/in/')[1] || '';
+                            let img = '';
+                            let imgs = card.querySelectorAll('img');
+                            for (let im of imgs) {
+                                let src = im.src || im.getAttribute('data-delayed-url') || '';
+                                if (src && src.includes('licdn.com')) {
+                                    if (!src.includes('company-logo') && !src.includes('ghost-person')) {
+                                        img = src;
+                                        break;
+                                    }
                                 }
                             }
+                            let headline = '';
+                            let hlEl = card.querySelector('.entity-result__primary-subtitle');
+                            if (hlEl) headline = hlEl.innerText.trim();
+                            res.push({ profile_url: url, name: name, profile_picture: img, headline: headline });
                         }
-                        let headline = '';
-                        let hlEl = card.querySelector('.entity-result__primary-subtitle');
-                        if (hlEl) headline = hlEl.innerText.trim();
-                        res.push({ profile_url: url, name: name, profile_picture: img, headline: headline });
+                    }
+                } else {
+                    const links = document.querySelectorAll('a[href*="/in/"]');
+                    for (let a of links) {
+                        let href = a.getAttribute('href');
+                        if (!href || href.includes('/search/')) continue;
+                        let url = href.split('?')[0];
+                        if (!url.startsWith('http')) url = 'https://www.linkedin.com' + url;
+                        if (!seen.has(url)) {
+                            seen.add(url);
+                            let name = a.innerText.trim();
+                            if (!name) name = url.split('/in/')[1] || '';
+                            res.push({ profile_url: url, name: name, profile_picture: '' });
+                        }
                     }
                 }
-            } else {
-                const links = document.querySelectorAll('a[href*="/in/"]');
-                for (let a of links) {
-                    let href = a.getAttribute('href');
-                    if (!href || href.includes('/search/')) continue;
-                    let url = href.split('?')[0];
-                    if (!url.startsWith('http')) url = 'https://www.linkedin.com' + url;
-                    if (!seen.has(url)) {
-                        seen.add(url);
-                        let name = a.innerText.trim();
-                        if (!name) name = url.split('/in/')[1] || '';
-                        res.push({ profile_url: url, name: name, profile_picture: '' });
-                    }
-                }
-            }
-            return res;
-        }''')
-        query_words = [w.lower() for w in (first_name + " " + last_name).split() if len(w) > 1]
-        filtered_results = []
-        for r in results:
-            name_lower = r.get('name', '').lower()
-            url_lower = r.get('profile_url', '').lower()
-            
-            # Filter out anonymous profiles
-            if not r.get('name') or r.get('name') in ('LinkedIn Member', 'LinkedIn User'):
-                continue
+                return res;
+            }''')
+            query_words = [w.lower() for w in (first_name + " " + last_name).split() if len(w) > 1]
+            filtered_results = []
+            for r in results:
+                name_lower = r.get('name', '').lower()
+                url_lower = r.get('profile_url', '').lower()
                 
-            # Filter by name keywords if query name is provided
-            if query_words:
-                match = False
-                for qw in query_words:
-                    if qw in ('sri', 'lanka', 'lankan', 'inc', 'corp', 'limited', 'co'):
-                        continue
-                    if qw in name_lower or qw in url_lower:
-                        match = True
-                        break
-                if not match:
-                    print(f"Skipping unrelated search result: {r.get('name')} ({r.get('profile_url')})")
+                # Filter out anonymous profiles
+                if not r.get('name') or r.get('name') in ('LinkedIn Member', 'LinkedIn User'):
                     continue
-            filtered_results.append(r)
-            
-        return filtered_results[:max_results]
+                    
+                # Filter by name keywords if query name is provided
+                if query_words:
+                    match = False
+                    for qw in query_words:
+                        if qw in ('sri', 'lanka', 'lankan', 'inc', 'corp', 'limited', 'co'):
+                            continue
+                        if qw in name_lower or qw in url_lower:
+                            match = True
+                            break
+                    if not match:
+                        print(f"Skipping unrelated search result: {r.get('name')} ({r.get('profile_url')})")
+                        continue
+                filtered_results.append(r)
+                
+            return filtered_results[:max_results]
+        except Exception as e:
+            err_msg = str(e)
+            print(f"Search error: {err_msg}")
+            if _retry < MAX_RETRIES and any(k in err_msg.lower() for k in ['context', 'navigation', 'closed', 'target', 'crashed']):
+                print(f"Browser page/context issue detected during search. Re-initializing session and retrying ({_retry + 1}/{MAX_RETRIES})...")
+                await asyncio.sleep(2)
+                await self.ensure_active_page()
+                return await self.search_people(first_name, last_name, company, max_results, force_search, _retry=_retry + 1)
+            raise e
 
 
     async def search_and_extract(self, first_name: str, last_name: str, company: str = "") -> Dict:
