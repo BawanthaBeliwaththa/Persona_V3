@@ -45,8 +45,18 @@ def _broadcast_sse(event_type: str, data: dict):
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 # Local module imports
-from core import LinkedInScraper
-from ranker import rank_sri_lankan_profiles, get_score_tier
+from core import (
+    LinkedInScraper, sanitize_profile, clean_profile,
+    _LINKEDIN_FOOTER_TOKENS, _REAL_LANGUAGE_NAMES,
+    _is_junk_text, _is_junk_entry, _is_real_language,
+    _clean_about, _clean_experience_list, _clean_education_list,
+    _clean_certification_list, _clean_languages_list, _clean_honors_list,
+    _clean_recommendations_list, _clean_skills_list, _clean_volunteer_list
+)
+
+#Enable below library import when you are ready to rank the people
+# from ranker import rank_sri_lankan_profiles, get_score_tier 
+
 
 # Flask App Initialization
 app = Flask(__name__)
@@ -368,7 +378,8 @@ def close():
         return jsonify({'success': False, 'error': str(e)})
 
 # Profile Ranking Endpoint [Still Under Construction - Not Fully Functional]
-@app.route('/api/rank', methods=['POST'])
+
+'''@app.route('/api/rank', methods=['POST'])
 def rank_profiles():
     try:
         data = request.json or {}
@@ -389,6 +400,7 @@ def rank_profiles():
         import traceback
         traceback.print_exc()
         return jsonify({'success': False, 'error': str(e)}), 500
+'''
 
 # -----------------------------------------------------------------------
 # Profile Data Cleaning Utilities
@@ -1044,6 +1056,7 @@ def save_to_persistent_db(profile):
     if not profile or 'error' in profile:
         return
         
+    cleaned_p = clean_profile(profile)
     with db_lock:
         try:
             # Ensure parent directories exist
@@ -1053,20 +1066,20 @@ def save_to_persistent_db(profile):
             if ALL_PROFILES_JSON.exists():
                 try:
                     with open(ALL_PROFILES_JSON, 'r', encoding='utf-8') as f:
-                        profiles = json.load(f)
+                        profiles = [clean_profile(p) for p in json.load(f)]
                 except Exception:
                     profiles = []
                     
             # Avoid duplicate profile URLs in the master database (update if exists, otherwise append)
-            url = profile.get('profile_url')
+            url = cleaned_p.get('profile_url')
             updated = False
             for i, p in enumerate(profiles):
                 if p.get('profile_url') == url:
-                    profiles[i] = profile
+                    profiles[i] = cleaned_p
                     updated = True
                     break
             if not updated:
-                profiles.append(profile)
+                profiles.append(cleaned_p)
                 
             with open(ALL_PROFILES_JSON, 'w', encoding='utf-8') as f:
                 json.dump(profiles, f, indent=2, ensure_ascii=False)
