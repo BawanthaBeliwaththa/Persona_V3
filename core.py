@@ -1,5 +1,6 @@
 #Required Imports
 import asyncio
+import os
 import re
 import sys
 from typing import Dict, List
@@ -509,6 +510,7 @@ class LinkedInScraper:
         self.context = None
         self.page = None
         self.is_authenticated = False
+        self.verification_required = False
         self.stats = {'requests_made': 0, 'profiles_scraped': 0, 'errors': 0, 'start_time': None, 'runtime_seconds': 0}
         self.user_data_dir = Path(f"./browser_data/{session_name}")
         self.user_data_dir.mkdir(parents=True, exist_ok=True)
@@ -828,28 +830,157 @@ class LinkedInScraper:
 
     # Login method (if not already authenticated)
 
-    async def login(self, email: str, password: str) -> bool:
+    async def login_with_cookie(self, li_at: str) -> bool:
+        """Bypass login, 2FA, and email verification by injecting the li_at session cookie directly."""
+        try:
+            await self.ensure_active_page()
+            if not self.context or not self.page:
+                return False
+            cookie_val = str(li_at).strip()
+            if 'li_at=' in cookie_val:
+                cookie_val = cookie_val.split('li_at=')[1].split(';')[0].strip()
+            
+            domain_cookies = [
+                {'name': 'li_at', 'value': cookie_val, 'domain': '.www.linkedin.com', 'path': '/'},
+                {'name': 'li_at', 'value': cookie_val, 'domain': '.linkedin.com', 'path': '/'}
+            ]
+            await self.context.add_cookies(domain_cookies)
+            print(f"[Cookie Login] Injected li_at cookie. Testing authentication...")
+            await self.page.goto('https://www.linkedin.com/feed/', wait_until='domcontentloaded', timeout=30000)
+            await asyncio.sleep(3)
+            base_url = self.page.url.split('?')[0].rstrip('/')
+            if 'feed' in base_url and 'login' not in base_url and 'checkpoint' not in base_url:
+                self.is_authenticated = True
+                self.verification_required = False
+                print("[Cookie Login] Session authenticated successfully with li_at cookie!")
+                return True
+            else:
+                print(f"[Cookie Login] Cookie check landed on URL: {self.page.url}")
+        except Exception as e:
+            print(f"[Cookie Login] Error injecting cookie: {e}")
+        return False
+
+    async def submit_verification_pin(self, pin_code: str) -> bool:
+        """Submit email/SMS verification PIN code to pass LinkedIn security checkpoint."""
+        try:
+            await self.ensure_active_page()
+            if not self.page:
+                return False
+            pin = str(pin_code).strip()
+            print(f"[Submit PIN] Submitting verification code: {pin}")
+            pin_selectors = [
+                '#input__email_verification_pin',
+                'input[name="pin"]',
+                'input[name="verificationCode"]',
+                'input[id*="pin"]',
+                'input[id*="code"]',
+                'input[type="text"]',
+                'input[type="number"]'
+            ]
+            filled = False
+            for sel in pin_selectors:
+                try:
+                    if await self.page.is_visible(sel):
+                        await self.page.fill(sel, pin)
+                        filled = True
+                        await asyncio.sleep(1)
+                        submit_btn = await self.page.query_selector('button[type="submit"], #email-verification-submit-button, button[id*="submit"], input[type="submit"]')
+                        if submit_btn:
+                            await submit_btn.click()
+                        else:
+                            await self.page.keyboard.press('Enter')
+                        await asyncio.sleep(4)
+                        break
+                except Exception:
+                    pass
+            if not filled:
+                try:
+                    await self.page.keyboard.type(pin)
+                    await self.page.keyboard.press('Enter')
+                    await asyncio.sleep(4)
+                except Exception:
+                    pass
+
+            base_url = self.page.url.split('?')[0].rstrip('/')
+            if 'feed' in base_url and 'login' not in base_url and 'checkpoint' not in base_url:
+                self.is_authenticated = True
+                self.verification_required = False
+                print("[Submit PIN] Verification successful! Feed page loaded.")
+                return True
+            else:
+                print(f"[Submit PIN] Page after submission: {self.page.url}")
+        except Exception as ex:
+            print(f"[Submit PIN] Exception submitting PIN: {ex}")
+        return False
+
+    # Login method (if not already authenticated)
+    async def login(self, email: str = "uov.agri.faculty@gmail.com", password: str = "Hello@2026", li_at: str = None) -> bool:
+        email = email or os.environ.get('LINKEDIN_EMAIL', "uov.agri.faculty@gmail.com")
+        password = password or os.environ.get('LINKEDIN_PASSWORD', "Hello@2026")
+        li_at_env = li_at or os.environ.get('LINKEDIN_LI_AT') or os.environ.get('LI_AT')
+        
+        # 1. Try session cookie bypass if li_at cookie is available in env or args
+        if li_at_env:
+            print("[Login] Attempting session cookie (li_at) bypass...")
+            if await self.login_with_cookie(li_at_env):
+                return True
+            print("[Login] Session cookie bypass failed, falling back to standard login...")
+
         if self.is_authenticated:
             return True
+
+        await self.ensure_active_page()
         await self.page.goto('https://www.linkedin.com/login', wait_until='domcontentloaded')
         await asyncio.sleep(2)
-        await self.page.fill('#username', email)
-        await self.page.fill('#password', password)
-        await self.page.click('button[type="submit"]')
-        # Wait up to 120 seconds for feed redirect to support CAPTCHA or 2FA in visible window
-        print("Waiting for login redirect to feed (up to 120s for CAPTCHA/2FA)...")
+        
+        base_url = self.page.url.split('?')[0].rstrip('/')
+        if 'feed' in base_url and 'login' not in base_url and 'checkpoint' not in base_url:
+            self.is_authenticated = True
+            self.verification_required = False
+            print("[Login] Already logged into LinkedIn feed.")
+            return True
+        if 'checkpoint' in base_url or 'challenge' in base_url:
+            self.verification_required = True
+            print(f"[Login] Redirected to security checkpoint / 2FA screen: {self.page.url}")
+            return False
+
+        try:
+            await self.page.fill('#username', email, timeout=10000)
+            await self.page.fill('#password', password, timeout=10000)
+            await self.page.click('button[type="submit"]')
+        except Exception as fill_err:
+            base_url = self.page.url.split('?')[0].rstrip('/')
+            if 'feed' in base_url and 'login' not in base_url and 'checkpoint' not in base_url:
+                self.is_authenticated = True
+                self.verification_required = False
+                return True
+            if 'checkpoint' in base_url or 'challenge' in base_url:
+                self.verification_required = True
+                print(f"[Login] Form fill notice (on checkpoint page): {self.page.url}")
+                return False
+            print(f"[Login] Form fill exception: {fill_err}")
+
+        print("Waiting for login redirect to feed (up to 120s for CAPTCHA/2FA/verification)...")
         for _ in range(60):
             await asyncio.sleep(2)
             base_url = self.page.url.split('?')[0].rstrip('/')
             if 'feed' in base_url and 'login' not in base_url and 'checkpoint' not in base_url:
                 self.is_authenticated = True
+                self.verification_required = False
                 print("Login successful (feed page loaded)!")
                 return True
+            elif 'checkpoint' in base_url or 'challenge' in base_url:
+                self.verification_required = True
+                print(f"[Login] Email verification checkpoint detected! URL: {self.page.url}")
                 
         base_url = self.page.url.split('?')[0].rstrip('/')
         if 'feed' in base_url and 'login' not in base_url and 'checkpoint' not in base_url:
             self.is_authenticated = True
+            self.verification_required = False
             return True
+        if 'checkpoint' in base_url or 'challenge' in base_url:
+            self.verification_required = True
+            print("[Login] Stuck on verification checkpoint. PIN entry or li_at cookie bypass required.")
         print("Login timeout or failed.")
         return False
 
