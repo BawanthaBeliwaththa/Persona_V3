@@ -15,6 +15,7 @@ import queue
 import time
 import requests
 import tempfile
+import uuid as _uuid
 
 # Force stdout/stderr to be unbuffered so logs print in real-time on Windows
 try:
@@ -54,7 +55,7 @@ from core import (
     _clean_recommendations_list, _clean_skills_list, _clean_volunteer_list
 )
 
-#Enable below library import when you are ready to rank the people
+#Enable below things when you are ready to rank the people
 # from ranker import rank_sri_lankan_profiles, get_score_tier 
 
 
@@ -1331,18 +1332,50 @@ async def perform_background_scrape_by_name(person_name, return_code):
             update_job_status(return_code, 'failed', error=str(e))
             print(f"Background scrape exception for {return_code}: {e}")
 
-@app.route('/api/client/scrape', methods=['POST'])
+@app.route('/api/client/scrape', methods=['GET', 'POST'])
 def client_scrape():
     """
     Client search endpoint — routes ALL scrape requests through the Task Bucket.
+    Supports POST (JSON/Form-data) and GET (query params).
     Returns the bucket task_id as the reference number immediately.
     The client polls /api/client/scrape-status?task_id=... to watch progress.
     """
-    data = request.json or {}
-    name = data.get('name', '').strip()
+    if request.method == 'GET':
+        data = request.args.to_dict()
+    else:
+        data = request.get_json(silent=True) or request.form.to_dict() or request.args.to_dict()
+
+    # If opened directly in browser via GET with no search parameters, return informative status & usage guide
+    if request.method == 'GET' and not any(k in data for k in ('name', 'query', 'url', 'profile_url', 'first_name', 'username', 'candidate_name')):
+        return jsonify({
+            'success': True,
+            'message': 'Persona V3 Scrape API is online and operational.',
+            'endpoints': {
+                'scrape': 'POST /api/client/scrape (or GET with ?name=...)',
+                'scrape_status': 'GET /api/client/scrape-status?task_id={reference_number}',
+                'retrieve_profile': 'GET/POST /api/client/retrieve?return_code={reference_number}',
+                'client_portal_ui': '/'
+            },
+            'example_usage': {
+                'curl_post': 'curl -X POST https://decorated-program-starfish.ngrok-free.dev/api/client/scrape -H "Content-Type: application/json" -d \'{"name": "Bawantha Beliwaththa", "company": "TechCorp"}\'',
+                'browser_get': 'https://decorated-program-starfish.ngrok-free.dev/api/client/scrape?name=Bawantha+Beliwaththa'
+            }
+        }), 200
+
+    url = (data.get('url') or data.get('profile_url') or '').strip()
+    name = (data.get('name') or data.get('query') or data.get('candidate_name') or '').strip()
+    first_name = (data.get('first_name') or '').strip()
+    last_name = (data.get('last_name') or '').strip()
+    company = (data.get('company') or '').strip()
+    max_results = int(data.get('max_results') or 5)
+
+    if not name and (first_name or last_name):
+        name = f"{first_name} {last_name}".strip()
+    elif not name and url:
+        name = url
 
     if not name:
-        return jsonify({'success': False, 'error': 'name is required'}), 400
+        return jsonify({'success': False, 'error': "'name', 'query', or 'profile_url' is required"}), 400
 
     name_lower = name.lower()
 
@@ -1385,22 +1418,23 @@ def client_scrape():
             }), 202
 
     # --- Add to Task Bucket ---
+    is_direct_url = name.startswith('http') or 'linkedin.com/in/' in name
     task = {
         'id': str(_uuid.uuid4()),
         'query': name,
-        'type': 'search',
+        'type': 'url' if is_direct_url else 'search',
         'search_params': {
-            'first_name': name,
-            'last_name': '',
-            'company': '',
-            'max_results': 5,
+            'first_name': first_name or name,
+            'last_name': last_name,
+            'company': company,
+            'max_results': max_results,
         },
         'status': 'pending',
         'added_at': datetime.now().isoformat(),
         'started_at': None,
         'completed_at': None,
         'result_name': '',
-        'result_url': '',
+        'result_url': name if is_direct_url else '',
         'profiles_found': 0,
         'error': None,
         # Track which name this maps to for status look-ups

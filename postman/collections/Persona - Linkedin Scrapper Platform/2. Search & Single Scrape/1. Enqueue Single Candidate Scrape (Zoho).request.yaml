@@ -1,0 +1,13 @@
+$kind: http-request
+url: http://localhost:8000/api/client/scrape
+method: POST
+headers:
+  Content-Type: application/json
+body:
+  type: text
+  content: |-
+    {
+      "name": "Bawantha Beliwaththa",
+      "profile_url": "https://www.linkedin.com/in/bawantha-beliwaththa"
+    }
+order: 1000

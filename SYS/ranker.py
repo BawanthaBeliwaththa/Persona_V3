@@ -286,6 +286,14 @@ def score_profile(profile: Dict) -> Dict:
     lang_pts = min(len(langs) * 1, WEIGHTS["languages"])
     breakdown["languages"] = lang_pts
 
+    # Premium Account Authority & Verified Status
+    is_prem = bool(profile.get("is_premium", False))
+    breakdown["is_premium"] = 5.0 if is_prem else 0.0
+
+    # Contact Info Availability
+    has_contact = bool(profile.get("contact_info"))
+    breakdown["has_contact_info"] = 5.0 if has_contact else 0.0
+
     profile_strength = round(sum(breakdown.values()), 2)
     profile_strength = min(profile_strength, 100.0)
 

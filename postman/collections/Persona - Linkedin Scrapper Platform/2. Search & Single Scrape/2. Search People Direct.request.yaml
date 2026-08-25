@@ -1,0 +1,15 @@
+$kind: http-request
+url: http://localhost:8000/api/scraper/search
+method: POST
+headers:
+  Content-Type: application/json
+body:
+  type: text
+  content: |-
+    {
+      "first_name": "Hansika",
+      "last_name": "Kavindi",
+      "company": "Virtusa",
+      "max_results": 5
+    }
+order: 2000

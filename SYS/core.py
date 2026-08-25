@@ -1,8 +1,15 @@
 #Required Imports
+import sys
 import asyncio
+
+if sys.platform == "win32":
+    try:
+        asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
+    except Exception:
+        pass
+
 import os
 import re
-import sys
 from typing import Dict, List
 from datetime import datetime
 from playwright.async_api import async_playwright
@@ -538,30 +545,32 @@ class LinkedInScraper:
         """Force-kill any Chromium processes that were launched with our profile dir.
         Must be called BEFORE _remove_locks so the files are no longer held open."""
         import subprocess, sys
-        if sys.platform != 'win32':
-            return
         try:
-            result = subprocess.run(
-                ['wmic', 'process', 'where',
-                 f"name='chrome.exe' and CommandLine like '%{browser_data_marker}%'",
-                 'get', 'ProcessId', '/FORMAT:CSV'],
-                capture_output=True, text=True, timeout=10
-            )
-            killed = 0
-            for line in result.stdout.splitlines():
-                parts = line.strip().split(',')
-                if len(parts) >= 2:
-                    try:
-                        pid = int(parts[-1].strip())
-                        subprocess.run(['taskkill', '/F', '/PID', str(pid)],
-                                       capture_output=True, timeout=5)
-                        killed += 1
-                        print(f"[init] Killed orphan Chromium PID {pid}")
-                    except (ValueError, Exception):
-                        pass
-            if killed:
-                import time
-                time.sleep(2)  # allow Windows to release file handles
+            if sys.platform == 'win32':
+                result = subprocess.run(
+                    ['wmic', 'process', 'where',
+                     f"name='chrome.exe' and CommandLine like '%{browser_data_marker}%'",
+                     'get', 'ProcessId', '/FORMAT:CSV'],
+                    capture_output=True, text=True, timeout=10
+                )
+                killed = 0
+                for line in result.stdout.splitlines():
+                    parts = line.strip().split(',')
+                    if len(parts) >= 2:
+                        try:
+                            pid = int(parts[-1].strip())
+                            subprocess.run(['taskkill', '/F', '/PID', str(pid)],
+                                           capture_output=True, timeout=5)
+                            killed += 1
+                            print(f"[init] Killed orphan Chromium PID {pid}")
+                        except (ValueError, Exception):
+                            pass
+                if killed:
+                    import time
+                    time.sleep(2)  # allow Windows to release file handles
+            else:
+                subprocess.run(['pkill', '-f', f'chromium.*{browser_data_marker}'], capture_output=True, timeout=5)
+                subprocess.run(['pkill', '-f', f'chrome.*{browser_data_marker}'], capture_output=True, timeout=5)
         except Exception as ex:
             print(f"[init] _kill_orphan_chromium: {ex} (non-fatal)")
 
@@ -615,16 +624,32 @@ class LinkedInScraper:
 
         launch_kwargs = dict(
             headless=self.headless,
-            viewport={'width': 1920, 'height': 1080},
+            viewport={'width': 1440, 'height': 900},
             user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
                        '(KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36',
             locale='en-US',
             timezone_id='America/New_York',
+            extra_http_headers={
+                'Accept-Language': 'en-US,en;q=0.9',
+                'Sec-Ch-Ua': '"Chromium";v="134", "Not:A-Brand";v="24", "Google Chrome";v="134"',
+                'Sec-Ch-Ua-Mobile': '?0',
+                'Sec-Ch-Ua-Platform': '"Windows"',
+                'Sec-Fetch-Dest': 'document',
+                'Sec-Fetch-Mode': 'navigate',
+                'Sec-Fetch-Site': 'none',
+                'Sec-Fetch-User': '?1',
+                'Upgrade-Insecure-Requests': '1'
+            },
             args=[
                 '--disable-blink-features=AutomationControlled',
+                '--no-sandbox',
+                '--disable-dev-shm-usage',
+                '--disable-infobars',
                 '--no-first-run',
                 '--no-default-browser-check',
-                '--disable-infobars',
+                '--disable-background-timer-throttling',
+                '--disable-backgrounding-occluded-windows',
+                '--disable-renderer-backgrounding',
             ]
         )
 
@@ -684,18 +709,27 @@ class LinkedInScraper:
 
         self.page = self.context.pages[0] if self.context.pages else await self.context.new_page()
         await self.context.add_init_script("""
-            Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
+            Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+            Object.defineProperty(navigator, 'plugins', { get: () => [1, 2, 3, 4, 5] });
+            Object.defineProperty(navigator, 'languages', { get: () => ['en-US', 'en'] });
             window.chrome = { runtime: {} };
         """)
-        await self.page.goto('https://www.linkedin.com/feed/', wait_until='domcontentloaded', timeout=30000)
-        await asyncio.sleep(2)
-        base_url = self.page.url.split('?')[0].rstrip('/')
-        if 'feed' in base_url and 'login' not in base_url and 'checkpoint' not in base_url:
-            self.is_authenticated = True
-            print("User is already logged in")
-        else:
+
+        # Check existing session in persistent browser profile
+        try:
+            await self.page.goto('https://www.linkedin.com/feed/', wait_until='domcontentloaded', timeout=20000)
+            await asyncio.sleep(2)
+            base_url = self.page.url.split('?')[0].rstrip('/')
+            if 'feed' in base_url and 'login' not in base_url and 'checkpoint' not in base_url:
+                self.is_authenticated = True
+                print("[Init] User is already logged in with persistent profile.")
+            else:
+                self.is_authenticated = False
+                print("[Init] Not logged in – authentication required.")
+        except Exception as e:
+            print(f"[Init] Initial feed check notice: {e}")
             self.is_authenticated = False
-            print("Not logged in – please log in via UI")
+
         return self
 
 
@@ -723,7 +757,9 @@ class LinkedInScraper:
                 elif self.context:
                     self.page = await self.context.new_page()
                     await self.context.add_init_script("""
-                        Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
+                        Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+                        Object.defineProperty(navigator, 'plugins', { get: () => [1, 2, 3, 4, 5] });
+                        Object.defineProperty(navigator, 'languages', { get: () => ['en-US', 'en'] });
                         window.chrome = { runtime: {} };
                     """)
                 else:
@@ -733,23 +769,33 @@ class LinkedInScraper:
             await self.initialize()
 
     async def check_auth(self) -> bool:
-        """Actively check if the current browser session is authenticated on LinkedIn."""
+        """Check if the current browser session is authenticated on LinkedIn.
+        
+        If li_at was pre-injected at context level, we trust it immediately.
+        Only navigates to /feed/ as a fallback when not already known-authenticated.
+        """
         await self.ensure_active_page()
         if not self.page or not self.context:
             self.is_authenticated = False
             return False
+
+        # If cookie was pre-injected, trust it — avoid /feed/ navigation which causes redirect loops
+        if getattr(self, '_li_at_injected', False) and self.is_authenticated:
+            return True
+
         try:
             base_url = self.page.url.split('?')[0].rstrip('/')
             if 'feed' in base_url and 'login' not in base_url and 'checkpoint' not in base_url:
                 self.is_authenticated = True
                 return True
-            
-            await self.page.goto('https://www.linkedin.com/feed/', wait_until='domcontentloaded', timeout=15000)
-            await asyncio.sleep(1)
-            base_url = self.page.url.split('?')[0].rstrip('/')
-            if 'feed' in base_url and 'login' not in base_url and 'checkpoint' not in base_url:
-                self.is_authenticated = True
-                return True
+            # Only navigate to /feed/ if we don't have a pre-injected cookie
+            if not getattr(self, '_li_at_injected', False):
+                await self.page.goto('https://www.linkedin.com/feed/', wait_until='domcontentloaded', timeout=15000)
+                await asyncio.sleep(1)
+                base_url = self.page.url.split('?')[0].rstrip('/')
+                if 'feed' in base_url and 'login' not in base_url and 'checkpoint' not in base_url:
+                    self.is_authenticated = True
+                    return True
         except Exception as e:
             print(f"[LinkedInScraper] check_auth exception: {e}")
             pass
@@ -831,31 +877,40 @@ class LinkedInScraper:
     # Login method (if not already authenticated)
 
     async def login_with_cookie(self, li_at: str) -> bool:
-        """Bypass login, 2FA, and email verification by injecting the li_at session cookie directly."""
+        """Inject li_at session cookie directly into browser context without a /feed/ roundtrip.
+        
+        Avoids ERR_TOO_MANY_REDIRECTS by NOT navigating to verify — the cookie is trusted
+        and auth is confirmed on the first profile extraction attempt.
+        """
         try:
             await self.ensure_active_page()
-            if not self.context or not self.page:
+            if not self.context:
                 return False
+
             cookie_val = str(li_at).strip()
             if 'li_at=' in cookie_val:
                 cookie_val = cookie_val.split('li_at=')[1].split(';')[0].strip()
-            
-            domain_cookies = [
-                {'name': 'li_at', 'value': cookie_val, 'domain': '.www.linkedin.com', 'path': '/'},
-                {'name': 'li_at', 'value': cookie_val, 'domain': '.linkedin.com', 'path': '/'}
-            ]
-            await self.context.add_cookies(domain_cookies)
-            print(f"[Cookie Login] Injected li_at cookie. Testing authentication...")
-            await self.page.goto('https://www.linkedin.com/feed/', wait_until='domcontentloaded', timeout=30000)
-            await asyncio.sleep(3)
-            base_url = self.page.url.split('?')[0].rstrip('/')
-            if 'feed' in base_url and 'login' not in base_url and 'checkpoint' not in base_url:
-                self.is_authenticated = True
-                self.verification_required = False
-                print("[Cookie Login] Session authenticated successfully with li_at cookie!")
-                return True
-            else:
-                print(f"[Cookie Login] Cookie check landed on URL: {self.page.url}")
+
+            if not cookie_val:
+                print("[Cookie Login] Empty li_at value — skipping.")
+                return False
+
+            # Clear old conflicting cookies from persistent store first
+            try:
+                await self.context.clear_cookies()
+            except Exception:
+                pass
+
+            # Inject cookie with domain .linkedin.com
+            await self.context.add_cookies([
+                {'name': 'li_at', 'value': cookie_val, 'domain': '.linkedin.com', 'path': '/', 'httpOnly': True, 'secure': True}
+            ])
+
+            self.is_authenticated = True
+            self._li_at_injected = True
+            print("[Cookie Login] li_at cookie injected cleanly into browser context.")
+            return True
+
         except Exception as e:
             print(f"[Cookie Login] Error injecting cookie: {e}")
         return False
@@ -922,15 +977,34 @@ class LinkedInScraper:
         # 1. Try session cookie bypass if li_at cookie is available in env or args
         if li_at_env:
             print("[Login] Attempting session cookie (li_at) bypass...")
-            if await self.login_with_cookie(li_at_env):
-                return True
-            print("[Login] Session cookie bypass failed, falling back to standard login...")
+            cookie_ok = await self.login_with_cookie(li_at_env)
+            if cookie_ok:
+                # Validate the cookie actually works against LinkedIn
+                try:
+                    await self.page.goto('https://www.linkedin.com/feed/', wait_until='commit', timeout=15000)
+                    await asyncio.sleep(2)
+                    cur_url = self.page.url
+                    if not cur_url.startswith("chrome-error://") and not any(bad in cur_url for bad in ['login', 'authwall', 'uas/authenticate']):
+                        self.is_authenticated = True
+                        print("[Login] Session cookie verified successfully!")
+                        return True
+                    else:
+                        print(f"[Login] Session cookie invalid (landed on {cur_url}). Falling back to credentials...")
+                        self.is_authenticated = False
+                        self._li_at_injected = False
+                except Exception as ce:
+                    print(f"[Login] Cookie verification exception ({ce}). Falling back to credentials...")
+                    self.is_authenticated = False
+                    self._li_at_injected = False
 
         if self.is_authenticated:
             return True
 
         await self.ensure_active_page()
-        await self.page.goto('https://www.linkedin.com/login', wait_until='domcontentloaded')
+        try:
+            await self.page.goto('https://www.linkedin.com/login', wait_until='domcontentloaded', timeout=30000)
+        except Exception:
+            pass
         await asyncio.sleep(2)
         
         base_url = self.page.url.split('?')[0].rstrip('/')
@@ -944,10 +1018,54 @@ class LinkedInScraper:
             print(f"[Login] Redirected to security checkpoint / 2FA screen: {self.page.url}")
             return False
 
+        # Fill login form with multi-selector fallback
         try:
-            await self.page.fill('#username', email, timeout=10000)
-            await self.page.fill('#password', password, timeout=10000)
-            await self.page.click('button[type="submit"]')
+            user_selectors = ['#username', 'input[name="session_key"]', 'input[id*="username"]', 'input[type="text"]', 'input[type="email"]']
+            pass_selectors = ['#password', 'input[name="session_password"]', 'input[id*="password"]', 'input[type="password"]']
+
+            try:
+                await self.page.wait_for_selector(', '.join(user_selectors), timeout=10000)
+            except Exception:
+                pass
+
+            user_filled = False
+            for us in user_selectors:
+                try:
+                    el = await self.page.query_selector(us)
+                    if el:
+                        await el.fill(email)
+                        user_filled = True
+                        break
+                except Exception:
+                    pass
+                    
+            pass_filled = False
+            for ps in pass_selectors:
+                try:
+                    el = await self.page.query_selector(ps)
+                    if el:
+                        await el.fill(password)
+                        pass_filled = True
+                        break
+                except Exception:
+                    pass
+
+            if user_filled and pass_filled:
+                submit_selectors = ['button[type="submit"]', 'button[data-litms-control-urn*="login-submit"]', '.btn__primary--large', '#login-submit']
+                submitted = False
+                for ss in submit_selectors:
+                    try:
+                        if await self.page.is_visible(ss):
+                            await self.page.click(ss)
+                            submitted = True
+                            break
+                    except Exception:
+                        pass
+                if not submitted:
+                    await self.page.keyboard.press('Enter')
+            else:
+                print(f"[Login] Notice: Form inputs not found (user={user_filled}, pass={pass_filled}) on {self.page.url}")
+
         except Exception as fill_err:
             base_url = self.page.url.split('?')[0].rstrip('/')
             if 'feed' in base_url and 'login' not in base_url and 'checkpoint' not in base_url:
@@ -972,7 +1090,7 @@ class LinkedInScraper:
             elif 'checkpoint' in base_url or 'challenge' in base_url:
                 self.verification_required = True
                 print(f"[Login] Email verification checkpoint detected! URL: {self.page.url}")
-                
+
         base_url = self.page.url.split('?')[0].rstrip('/')
         if 'feed' in base_url and 'login' not in base_url and 'checkpoint' not in base_url:
             self.is_authenticated = True
@@ -991,21 +1109,56 @@ class LinkedInScraper:
         print(f"Extracting: {profile_url}" + (f" (retry {_retry})" if _retry else ""))
         try:
             await self.ensure_active_page()
-            # Step 1: Load main profile page
-            await self.page.goto(profile_url, wait_until='domcontentloaded', timeout=60000)
-            await asyncio.sleep(4)
-            try:
-                await self.page.wait_for_selector('h1', timeout=15000)
-            except:
-                await asyncio.sleep(3)
 
-            # Step 2: Scroll to trigger lazy-loading
-            for _ in range(10):
+            # Normalize and identify target slug to guard against stray redirects
+            target_slug = profile_url.rstrip('/').split('/in/')[-1].split('?')[0].lower() if '/in/' in profile_url else ''
+
+            # Step 1: Load main profile page
+            nav_ok = False
+            for wait_mode in ('domcontentloaded', 'commit'):
                 try:
-                    await self.page.evaluate('window.scrollBy(0, 500)')
-                except:
+                    await self.page.goto(profile_url, wait_until=wait_mode, timeout=45000)
+                    nav_ok = True
+                    break
+                except Exception as ge:
+                    ge_str = str(ge)
+                    print(f"Navigation notice for {profile_url} ({wait_mode}): {ge_str[:120]}")
+                    if self.page.is_closed() or any(k in ge_str.lower() for k in ["closed", "target", "context"]):
+                        raise ge
+                    if "redirect" in ge_str.lower() or "timeout" in ge_str.lower():
+                        continue
+                    break
+
+            await asyncio.sleep(2.5)
+
+            # Verify we landed on a valid page, not an authwall or error
+            try:
+                current_url = self.page.url
+                if current_url.startswith("chrome-error://") or not nav_ok:
+                    print(f"[Extract] Navigation landed on error page: {current_url}.")
+                    return {
+                        "error": f"LinkedIn navigation failed for {profile_url}. Check connection or cookie."
+                    }
+                if any(bad in current_url for bad in ['authwall', 'login', 'checkpoint', 'uas/authenticate']):
+                    print(f"[Extract] Redirected to auth wall: {current_url}.")
+                    return {
+                        "error": f"LinkedIn redirected to login/authwall. Session cookie may be expired. URL: {current_url}"
+                    }
+            except Exception:
+                pass
+
+            try:
+                await self.page.wait_for_selector('h1', timeout=10000)
+            except Exception:
+                await asyncio.sleep(2)
+
+            # Step 2: Scroll to trigger lazy-loading of all main page sections
+            for _ in range(8):
+                try:
+                    await self.page.evaluate('window.scrollBy(0, 600)')
+                except Exception:
                     pass
-                await asyncio.sleep(0.6)
+                await asyncio.sleep(0.4)
             await asyncio.sleep(1)
 
             # Step 3: Click expand buttons on main page
@@ -1021,28 +1174,35 @@ class LinkedInScraper:
                     buttons = await self.page.query_selector_all(sel)
                     for btn in buttons:
                         try:
-                            await btn.scroll_into_view_if_needed()
                             await btn.click()
-                            await asyncio.sleep(0.5)
-                        except:
+                            await asyncio.sleep(0.3)
+                        except Exception:
                             pass
-                except:
+                except Exception:
                     pass
-            await asyncio.sleep(1)
+            await asyncio.sleep(0.8)
 
-            # Step 4: Extract basic info from main page DOM
-            raw = await self.page.evaluate('''() => {
+            # Step 4: Extract rich basic info and all visible section texts directly from main page DOM
+            dom_data = await self.page.evaluate('''() => {
                 const data = {
                     name: '', headline: '', tagline: '', location: '',
                     profile_picture: '', connections: '', followers: '',
-                    page_title: document.title || ''
+                    page_title: document.title || '',
+                    about: '', is_premium: false,
+                    exp_text: '', edu_text: '', skill_text: '',
+                    cert_text: '', lang_text: '', vol_text: '',
+                    hon_text: '', rec_text: '',
+                    has_more_exp: false, has_more_edu: false, has_more_skills: false,
+                    contact_info: {}
                 };
+
                 // Name
                 const nameEls = ['h1', '.text-heading-xlarge', '.pv-top-card--list li:first-child'];
                 for (const sel of nameEls) {
                     const el = document.querySelector(sel);
                     if (el && el.innerText.trim()) { data.name = el.innerText.trim(); break; }
                 }
+
                 // Headline / Tagline
                 const hlEls = ['.text-body-medium', '.pv-text-details__left-panel .text-body-medium', '.text-heading-medium'];
                 for (const sel of hlEls) {
@@ -1053,18 +1213,21 @@ class LinkedInScraper:
                         break;
                     }
                 }
+
                 // Location
                 const locEls = ['.text-body-small.inline.t-black--light', '.pv-text-details__left-panel span.text-body-small'];
                 for (const sel of locEls) {
                     const el = document.querySelector(sel);
                     if (el && el.innerText.trim()) { data.location = el.innerText.trim(); break; }
                 }
+
                 // Profile picture
                 const imgEls = ['img.pv-top-card-profile-picture__image', '.pv-top-card-profile-picture img', '.pv-top-card__photo img', 'img[alt*="profile photo" i]', 'img[alt*="profile picture" i]', 'img[src*="licdn.com/dms/image/"]', 'img.presence-entity__image'];
                 for (const sel of imgEls) {
                     const el = document.querySelector(sel);
                     if (el && el.src) { data.profile_picture = el.src; break; }
                 }
+
                 // Connections & Followers
                 const spanEls = document.querySelectorAll('span.t-bold, ul.pv-top-card--list-bullet li, li.text-body-small span, span');
                 for (const s of spanEls) {
@@ -1077,138 +1240,140 @@ class LinkedInScraper:
                         data.followers = pTxt || txt;
                     }
                 }
-                // About section — click see more first
-                let aboutText = '';
+
+                // About section
                 const aboutSec = document.querySelector('section[data-section="about"], #about ~ div, div[id="about"]');
                 if (aboutSec) {
                     const btn = aboutSec.querySelector('button, .inline-show-more-text__button, span.see-more-button button');
                     if (btn) { try { btn.click(); } catch(e) {} }
                     const textSpans = aboutSec.querySelectorAll('.display-flex span[aria-hidden="true"], .pv-shared-text-with-see-more span');
                     if (textSpans.length > 0) {
-                        aboutText = Array.from(textSpans).map(s => s.innerText.trim()).filter(t => t.length > 0).join('\\n');
+                        data.about = Array.from(textSpans).map(s => s.innerText.trim()).filter(t => t.length > 0).join('\\n');
                     } else {
-                        aboutText = aboutSec.innerText.trim();
+                        data.about = aboutSec.innerText.trim();
                     }
                 }
-                if (!aboutText) {
-                    const headings = document.querySelectorAll('h2, h3, div[id]');
-                    for (const h of headings) {
-                        if (h.innerText && h.innerText.trim() === 'About') {
-                            const sib = h.nextElementSibling;
-                            if (sib) aboutText = sib.innerText.trim();
-                            break;
+
+                // Premium Badge Detection
+                let isPremium = false;
+                const premiumSelectors = [
+                    '.pv-member-badge--premium',
+                    'svg.premium-icon',
+                    '[data-test-premium-icon]',
+                    '[aria-label*="Premium member" i]',
+                    '[aria-label*="Premium subscriber" i]',
+                    '.pv-top-card__badge--premium',
+                    'svg[data-test-icon="premium-gold-icon"]',
+                    '.premium-icon',
+                    'span.premium-badge'
+                ];
+                for (const sel of premiumSelectors) {
+                    if (document.querySelector(sel)) {
+                        isPremium = true;
+                        break;
+                    }
+                }
+                if (!isPremium) {
+                    const bodyText = document.body ? document.body.innerText : '';
+                    if (bodyText.includes('Premium subscriber') || bodyText.includes('Premium member') || bodyText.includes('LinkedIn Premium')) {
+                        isPremium = true;
+                    }
+                }
+                data.is_premium = isPremium;
+
+                // Section text helper
+                function getSectionContent(selectors) {
+                    for (const sel of selectors) {
+                        const sec = document.querySelector(sel);
+                        if (sec) {
+                            const items = sec.querySelectorAll('li.artdeco-list__item, li.pvs-list__paged-list-item, div.pvs-entity');
+                            if (items.length > 0) {
+                                return Array.from(items).map(li => li.innerText.trim()).filter(t => t.length > 0).join('\\n---\\n');
+                            }
+                            return sec.innerText.trim();
                         }
                     }
+                    return '';
                 }
-                data.about = aboutText;
+
+                data.exp_text   = getSectionContent(['section[data-section="experience"]', '#experience ~ div', 'div[id="experience"]']);
+                data.edu_text   = getSectionContent(['section[data-section="education"]', '#education ~ div', 'div[id="education"]']);
+                data.skill_text = getSectionContent(['section[data-section="skills"]', '#skills ~ div', 'div[id="skills"]']);
+                data.cert_text  = getSectionContent(['section[data-section="certifications"]', '#certifications ~ div', '#licenses_and_certifications ~ div']);
+                data.lang_text  = getSectionContent(['section[data-section="languages"]', '#languages ~ div']);
+                data.vol_text   = getSectionContent(['section[data-section="volunteer"]', '#volunteering_experience ~ div']);
+                data.hon_text   = getSectionContent(['section[data-section="honors"]', '#honors_and_awards ~ div']);
+                data.rec_text   = getSectionContent(['section[data-section="recommendations"]', '#recommendations ~ div']);
+
+                // Check for "Show all" links to know if detail subpage is worth fetching
+                data.has_more_exp    = !!document.querySelector('a[href*="/details/experience"]');
+                data.has_more_edu    = !!document.querySelector('a[href*="/details/education"]');
+                data.has_more_skills = !!document.querySelector('a[href*="/details/skills"]');
+
                 return data;
             }''')
 
-            name = raw.get('name', '')
-            if not name and raw.get('page_title'):
-                title = raw['page_title']
+            name = dom_data.get('name', '')
+            if not name and dom_data.get('page_title'):
+                title = dom_data['page_title']
                 if ' - ' in title:
                     name = title.split(' - ')[0].strip()
                 elif ' | ' in title:
                     name = title.split(' | ')[0].strip()
 
-            # Step 5: Visit detail sub-pages
-            base_url = profile_url.rstrip('/')
-            detail_texts: Dict[str, str] = {}
-            contact_info: Dict[str, str] = {}
-            
-            detail_pages = {
-                'experience':      f"{base_url}/details/experience/",
-                'education':       f"{base_url}/details/education/",
-                'skills':          f"{base_url}/details/skills/",
-                'certifications':  f"{base_url}/details/certifications/",
-                'honors':          f"{base_url}/details/honors/",
-                'languages':       f"{base_url}/details/languages/",
-                'volunteer':       f"{base_url}/details/volunteering-experiences/",
-                'recommendations': f"{base_url}/details/recommendations/",
-                'contact_info':    f"{base_url}/overlay/contact-info/"
+            detail_texts: Dict[str, str] = {
+                'experience': dom_data.get('exp_text', ''),
+                'education': dom_data.get('edu_text', ''),
+                'skills': dom_data.get('skill_text', ''),
+                'certifications': dom_data.get('cert_text', ''),
+                'languages': dom_data.get('lang_text', ''),
+                'volunteer': dom_data.get('vol_text', ''),
+                'honors': dom_data.get('hon_text', ''),
+                'recommendations': dom_data.get('rec_text', ''),
             }
-            for section, url in detail_pages.items():
+            contact_info: Dict[str, str] = dom_data.get('contact_info', {})
+
+            # Step 5: Safe targeted detail subpages visit ONLY if "Show all" was found and section is truncated
+            base_url = profile_url.rstrip('/')
+            subpages_to_check = []
+            if dom_data.get('has_more_exp'):
+                subpages_to_check.append(('experience', f"{base_url}/details/experience/"))
+            if dom_data.get('has_more_edu'):
+                subpages_to_check.append(('education', f"{base_url}/details/education/"))
+            if dom_data.get('has_more_skills'):
+                subpages_to_check.append(('skills', f"{base_url}/details/skills/"))
+
+            for section, url in subpages_to_check:
                 try:
-                    await self.page.goto(url, wait_until='domcontentloaded', timeout=30000)
-                    await asyncio.sleep(2)
-                    # Scroll sub-page
-                    for _ in range(5):
-                        try:
-                            await self.page.evaluate('window.scrollBy(0, 500)')
-                        except:
-                            pass
-                        await asyncio.sleep(0.4)
-                    # Expand "Show more" buttons
-                    try:
-                        btns = await self.page.query_selector_all(
-                            'button.inline-show-more-text__button, button[aria-label*="Show more"]'
-                        )
-                        for b in btns:
-                            try:
-                                await b.click()
-                                await asyncio.sleep(0.4)
-                            except:
-                                pass
-                    except:
-                        pass
-                    # Extract ONLY the structured list items from the detail pane,
-                    # not the entire body (which includes nav, sidebar, "People also viewed", etc.)
+                    await self.page.goto(url, wait_until='domcontentloaded', timeout=20000)
+                    await asyncio.sleep(1.5)
+
+                    # Guard: verify page hasn't redirected to an authwall, feed, or a different profile
+                    current_sub_url = self.page.url.lower()
+                    if target_slug and target_slug not in current_sub_url:
+                        print(f"[Extract] Detail page {section} redirected away from target ({current_sub_url}). Skipping subpage.")
+                        break
+
                     page_text = await self.page.evaluate('''() => {
-                        // Try the most specific container first
-                        const selectors = [
-                            'main .pvs-list__container',
-                            'main ul.pvs-list',
-                            '[data-view-name="profile-component-entity"]',
-                            '.scaffold-layout__main .pvs-list__container',
-                            '.scaffold-layout__main ul',
-                        ];
-                        for (const sel of selectors) {
-                            const el = document.querySelector(sel);
-                            if (el && el.innerText.trim().length > 50) {
-                                return el.innerText.trim();
-                            }
-                        }
-                        // Last resort: grab only the <li> text inside main, NOT full body
-                        const main = document.querySelector('main, [role="main"]');
+                        const main = document.querySelector('main, [role="main"], .scaffold-layout__main');
                         if (main) {
                             const items = main.querySelectorAll('li.pvs-list__paged-list-item, li.artdeco-list__item');
                             if (items.length > 0) {
                                 return Array.from(items).map(li => li.innerText.trim()).join('\\n---\\n');
                             }
-                            // Narrow fallback: exclude known sidebar regions
-                            const sidebar = main.querySelector('aside, [data-view-name="profile-card"]');
-                            if (sidebar) sidebar.remove();
                             return main.innerText.trim();
                         }
                         return "";
                     }''')
-                    if section == 'contact_info':
-                        contact_data = await self.page.evaluate('''() => {
-                            const data = {};
-                            const sections = document.querySelectorAll('section.pv-contact-info__contact-type');
-                            for (const sec of sections) {
-                                const header = sec.querySelector('h3');
-                                if (!header) continue;
-                                const key = header.innerText.trim().toLowerCase();
-                                const vals = Array.from(sec.querySelectorAll('.pv-contact-info__ci-container, a, span.t-14, div.t-14')).map(el => el.innerText.trim()).filter(t => t.length > 0 && t !== header.innerText.trim());
-                                if (vals.length > 0) {
-                                    data[key] = Array.from(new Set(vals)).join(', ');
-                                }
-                            }
-                            return data;
-                        }''')
-                        if contact_data:
-                            contact_info = contact_data
-                    elif page_text and len(page_text) > 80:
+                    if page_text and len(page_text) > len(detail_texts.get(section, '')):
                         detail_texts[section] = page_text
-                except:
+                except Exception as de:
+                    print(f"[Extract] Notice visiting detail page {section}: {de}")
                     pass
 
-            # Step 6: Parse each section
-            about = raw.get('about', '').strip()
+            # Step 6: Parse each section cleanly
+            about = dom_data.get('about', '').strip()
             if not about:
-                # Fallback: parse from main page text
                 main_text_for_about = await self.page.evaluate('() => document.body.innerText || ""')
                 clean_main = self._strip_posts(main_text_for_about)
                 about = self._parse_about(clean_main)
@@ -1232,7 +1397,7 @@ class LinkedInScraper:
             honors          = self._parse_honors(hon_text)
             recommendations = self._parse_recommendations(rec_text)
 
-            connections = raw.get('connections', '')
+            connections = dom_data.get('connections', '')
 
             # Step 7: Navigate back to profile
             try:
@@ -1242,13 +1407,15 @@ class LinkedInScraper:
                 pass
 
             self.stats['profiles_scraped'] += 1
+            is_prem = bool(dom_data.get('is_premium', False))
             result = {
                 'name': name,
-                'headline': raw.get('headline', ''),
-                'location': raw.get('location', ''),
+                'headline': dom_data.get('headline', ''),
+                'location': dom_data.get('location', ''),
                 'connections': connections,
-                'profile_picture': raw.get('profile_picture', ''),
+                'profile_picture': dom_data.get('profile_picture', ''),
                 'about': about,
+                'is_premium': is_prem,
                 'current_job': current_job,
                 'experience': experience,
                 'qualifications': qualifications,
@@ -1263,6 +1430,7 @@ class LinkedInScraper:
                 'scraped_at': datetime.now().isoformat()
             }
             found = []
+            if is_prem: found.append('⭐ Premium Account')
             if about: found.append('about')
             if current_job.get('title'): found.append('job')
             if experience: found.append(f'{len(experience)} exp')
@@ -1287,6 +1455,42 @@ class LinkedInScraper:
                 return await self.extract_profile(profile_url, _retry=_retry + 1)
             self.stats['errors'] += 1
             return {'profile_url': profile_url, 'error': err_msg}
+
+    async def extract_contact_info(self, profile_url: str) -> Dict[str, Any]:
+        """Navigate to contact-info overlay/modal and extract structured contact info."""
+        try:
+            await self.ensure_active_page()
+            base_url = profile_url.rstrip('/')
+            contact_url = f"{base_url}/overlay/contact-info/"
+            try:
+                await self.page.goto(contact_url, wait_until='domcontentloaded', timeout=30000)
+            except Exception:
+                pass
+            await asyncio.sleep(2)
+
+            contact_data = await self.page.evaluate('''() => {
+                const data = {};
+                const sections = document.querySelectorAll('section.pv-contact-info__contact-type, div.pv-profile-section__section-info, [data-view-name="profile-contact-info"]');
+                for (const sec of sections) {
+                    const header = sec.querySelector('h3, h4');
+                    if (!header) continue;
+                    const key = header.innerText.trim().toLowerCase();
+                    const vals = Array.from(sec.querySelectorAll('.pv-contact-info__ci-container, a, span.t-14, div.t-14')).map(el => el.innerText.trim()).filter(t => t.length > 0 && t !== header.innerText.trim());
+                    if (vals.length > 0) {
+                        data[key] = Array.from(new Set(vals)).join(', ');
+                    }
+                }
+                const text = document.body ? document.body.innerText : '';
+                const emailMatch = text.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}/);
+                if (emailMatch && !data['email']) {
+                    data['email'] = emailMatch[0];
+                }
+                return data;
+            }''')
+            return contact_data or {}
+        except Exception as e:
+            print(f"Error extracting contact info: {e}")
+            return {}
 
     # ── Text cleaning helpers ───────────────────────────────────────────────
 
@@ -1861,13 +2065,28 @@ class LinkedInScraper:
             import urllib.parse
             encoded = urllib.parse.quote(query)
             url = f"https://www.linkedin.com/search/results/people/?keywords={encoded}"
+            for wait_mode in ('domcontentloaded', 'commit'):
+                try:
+                    await self.page.goto(url, wait_until=wait_mode, timeout=45000)
+                    break
+                except Exception as e:
+                    e_str = str(e)
+                    print(f"Warning: Search page navigation error ({wait_mode}): {e_str[:120]}")
+                    if self.page.is_closed() or any(k in e_str.lower() for k in ["closed", "target", "context"]):
+                        raise e
+                    if "redirect" in e_str.lower() or "timeout" in e_str.lower():
+                        continue
+                    print("Attempting to parse elements anyway...")
+                    break
+
+            # If redirected to authwall, return empty immediately
             try:
-                await self.page.goto(url, wait_until='domcontentloaded', timeout=60000)
-            except Exception as e:
-                print(f"Warning: Search page navigation encountered error: {e}")
-                if self.page.is_closed() or any(k in str(e).lower() for k in ["closed", "target", "context"]):
-                    raise e
-                print("Attempting to parse elements anyway...")
+                current_url = self.page.url
+                if any(bad in current_url for bad in ['authwall', 'login', 'checkpoint', 'uas/authenticate']):
+                    print(f"[Search] Redirected to auth wall: {current_url}. Returning empty results.")
+                    return []
+            except Exception:
+                pass
 
             await asyncio.sleep(3)
 
@@ -1973,16 +2192,19 @@ class LinkedInScraper:
             raise e
 
 
-    async def search_and_extract(self, first_name: str, last_name: str, company: str = "") -> Dict:
-        results = await self.search_people(first_name, last_name, company)
+    async def search_and_extract(self, first_name: str, last_name: str, company: str = "", max_results: int = 1) -> Dict:
+        results = await self.search_people(first_name, last_name, company, max_results=max_results)
         if not results:
-            return {'success': False, 'error': 'No profiles found', 'profiles': []}
+            return {'success': False, 'error': 'No matching profiles found', 'profiles': []}
         extracted = []
         for i, r in enumerate(results):
-            print(f"Extracting {i+1}/{len(results)}")
-            extracted.append(await self.extract_profile(r['profile_url']))
-            await asyncio.sleep(5)
-        return {'success': True, 'profiles_extracted': len(extracted), 'profiles': extracted}
+            print(f"[Search & Extract] Scraping profile {i+1}/{len(results)}: {r.get('name')} ({r.get('profile_url')})")
+            p = await self.extract_profile(r['profile_url'])
+            if p and not p.get('error') and p.get('name'):
+                extracted.append(p)
+            if i < len(results) - 1:
+                await asyncio.sleep(4)
+        return {'success': bool(extracted), 'profiles_extracted': len(extracted), 'profiles': extracted}
 
     def sanitize_profile(self, profile: Dict) -> Dict:
         """

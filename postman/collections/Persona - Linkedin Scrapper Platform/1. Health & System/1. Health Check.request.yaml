@@ -1,0 +1,4 @@
+$kind: http-request
+url: http://localhost:8000/
+method: GET
+order: 1000

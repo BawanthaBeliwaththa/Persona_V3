@@ -1,0 +1,6 @@
+$kind: http-request
+url: http://localhost:8000/api/persona/bulk-retrieve?return_code=BATCH-2026-TEST-01
+method: GET
+queryParams:
+  return_code: BATCH-2026-TEST-01
+order: 2000

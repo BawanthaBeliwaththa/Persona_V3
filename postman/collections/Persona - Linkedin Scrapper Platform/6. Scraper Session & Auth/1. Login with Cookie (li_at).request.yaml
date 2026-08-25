@@ -1,0 +1,12 @@
+$kind: http-request
+url: http://localhost:8000/api/scraper/login-cookie
+method: POST
+headers:
+  Content-Type: application/json
+body:
+  type: text
+  content: |-
+    {
+      "li_at": "YOUR_LI_AT_COOKIE_HERE"
+    }
+order: 1000

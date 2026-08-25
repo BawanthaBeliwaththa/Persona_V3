@@ -1,0 +1,4 @@
+$kind: http-request
+url: http://localhost:8000/api/bucket/resume
+method: POST
+order: 4000

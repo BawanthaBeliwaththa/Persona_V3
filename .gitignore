@@ -1,0 +1,54 @@
+# Environments & Secrets (CRITICAL: Do NOT commit secrets)
+.env
+*.env
+*.env.local
+SYS/.env
+
+# Python Bytecode & Cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+
+# Virtual Environments
+venv/
+.venv/
+env/
+ENV/
+
+# Playwright & Browser Sessions (User data, cookies, locks)
+browser_data/
+SYS/browser_data/
+**/browser_data/
+*.log
+
+# Scraped Data & Runtime Exports
+exports/*.pdf
+exports/*.json
+exports/*.csv
+!exports/template.csv
+!exports/template.json
+exports/api_scrapes/
+exports/all_scraped_profiles.json
+exports/all_scraped_profiles.csv
+exports/name_cache.json
+exports/bucket_queue.json
+exports/task_bucket/
+SYS/exports/*.json
+SYS/exports/*.csv
+SYS/exports/api_scrapes/
+SYS/exports/all_scraped_profiles.json
+SYS/exports/all_scraped_profiles.csv
+SYS/exports/name_cache.json
+SYS/exports/bucket_queue.json
+
+# IDE / OS Artifacts
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+dist.zip
+dist/
+.postman/
+gg/
