@@ -1,0 +1,1055 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Persona V3 - VPS Deployment & API Blueprint</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #0b0f19;
+            --bg-secondary: #111827;
+            --bg-card: rgba(17, 24, 39, 0.7);
+            --bg-card-hover: rgba(31, 41, 55, 0.8);
+            --border-color: rgba(255, 255, 255, 0.08);
+            --border-glow: rgba(99, 102, 241, 0.4);
+            
+            --text-main: #f3f4f6;
+            --text-muted: #9ca3af;
+            --text-dim: #6b7280;
+
+            --accent-primary: #6366f1;
+            --accent-secondary: #a855f7;
+            --accent-pink: #ec4899;
+            --accent-cyan: #06b6d4;
+            --accent-emerald: #10b981;
+            --accent-amber: #f59e0b;
+
+            --gradient-brand: linear-gradient(135deg, #6366f1 0%, #a855f7 50%, #ec4899 100%);
+            --gradient-dark: linear-gradient(180deg, rgba(17, 24, 39, 0.9) 0%, rgba(11, 15, 25, 0.95) 100%);
+            --gradient-glow: radial-gradient(circle at 50% 0%, rgba(99, 102, 241, 0.15), transparent 70%);
+
+            --radius-sm: 8px;
+            --radius-md: 14px;
+            --radius-lg: 20px;
+            --shadow-glow: 0 8px 32px 0 rgba(99, 102, 241, 0.2);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background-color: var(--bg-primary);
+            color: var(--text-main);
+            line-height: 1.6;
+            background-image: var(--gradient-glow);
+            background-attachment: fixed;
+            min-height: 100vh;
+            padding-bottom: 60px;
+        }
+
+        /* Container */
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 24px;
+        }
+
+        /* Header */
+        header {
+            padding: 48px 0 32px 0;
+            border-bottom: 1px solid var(--border-color);
+            position: relative;
+        }
+
+        .header-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 14px;
+            background: rgba(99, 102, 241, 0.12);
+            border: 1px solid rgba(99, 102, 241, 0.3);
+            border-radius: 50px;
+            color: #818cf8;
+            font-size: 0.85rem;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+            margin-bottom: 16px;
+        }
+
+        .header-badge .dot {
+            width: 8px;
+            height: 8px;
+            background-color: var(--accent-emerald);
+            border-radius: 50%;
+            box-shadow: 0 0 10px var(--accent-emerald);
+        }
+
+        h1 {
+            font-family: 'Outfit', sans-serif;
+            font-size: 2.8rem;
+            font-weight: 800;
+            letter-spacing: -0.02em;
+            background: var(--gradient-brand);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 12px;
+        }
+
+        .header-subtitle {
+            font-size: 1.15rem;
+            color: var(--text-muted);
+            max-width: 850px;
+        }
+
+        /* Navigation Bar */
+        .nav-tabs {
+            display: flex;
+            gap: 10px;
+            margin: 32px 0 24px 0;
+            padding: 6px;
+            background: rgba(17, 24, 39, 0.8);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-md);
+            backdrop-filter: blur(12px);
+            overflow-x: auto;
+        }
+
+        .tab-btn {
+            padding: 12px 20px;
+            background: transparent;
+            border: none;
+            border-radius: var(--radius-sm);
+            color: var(--text-muted);
+            font-family: 'Inter', sans-serif;
+            font-size: 0.92rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.25s ease;
+            white-space: nowrap;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .tab-btn:hover {
+            color: var(--text-main);
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .tab-btn.active {
+            background: var(--accent-primary);
+            color: #ffffff;
+            box-shadow: 0 4px 14px rgba(99, 102, 241, 0.4);
+        }
+
+        /* Section Layout */
+        .content-section {
+            display: none;
+            animation: fadeIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+
+        .content-section.active {
+            display: block;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Cards & Grid */
+        .grid-2 {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+            gap: 24px;
+            margin-top: 20px;
+        }
+
+        .grid-3 {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+
+        .glass-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-lg);
+            padding: 28px;
+            backdrop-filter: blur(16px);
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .glass-card:hover {
+            border-color: var(--border-glow);
+            box-shadow: var(--shadow-glow);
+            transform: translateY(-2px);
+        }
+
+        .card-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+
+        .card-icon {
+            width: 44px;
+            height: 44px;
+            border-radius: var(--radius-md);
+            background: rgba(99, 102, 241, 0.15);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.4rem;
+            color: #a5b4fc;
+        }
+
+        .card-title {
+            font-family: 'Outfit', sans-serif;
+            font-size: 1.35rem;
+            font-weight: 700;
+            color: var(--text-main);
+        }
+
+        /* Typography & Content */
+        h2 {
+            font-family: 'Outfit', sans-serif;
+            font-size: 1.8rem;
+            font-weight: 700;
+            margin: 32px 0 16px 0;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        h2::before {
+            content: '';
+            display: inline-block;
+            width: 4px;
+            height: 24px;
+            background: var(--gradient-brand);
+            border-radius: 4px;
+        }
+
+        h3 {
+            font-family: 'Outfit', sans-serif;
+            font-size: 1.25rem;
+            font-weight: 600;
+            margin: 20px 0 10px 0;
+            color: #e5e7eb;
+        }
+
+        p {
+            color: var(--text-muted);
+            font-size: 0.98rem;
+            margin-bottom: 14px;
+        }
+
+        ul, ol {
+            margin-left: 20px;
+            color: var(--text-muted);
+            margin-bottom: 16px;
+        }
+
+        li {
+            margin-bottom: 8px;
+        }
+
+        strong {
+            color: var(--text-main);
+        }
+
+        /* Alerts / Banners */
+        .alert {
+            padding: 16px 20px;
+            border-radius: var(--radius-md);
+            margin: 20px 0;
+            display: flex;
+            gap: 14px;
+            align-items: flex-start;
+            border: 1px solid transparent;
+        }
+
+        .alert-tip {
+            background: rgba(16, 185, 129, 0.08);
+            border-color: rgba(16, 185, 129, 0.3);
+            color: #a7f3d0;
+        }
+
+        .alert-warning {
+            background: rgba(245, 158, 11, 0.08);
+            border-color: rgba(245, 158, 11, 0.3);
+            color: #fde68a;
+        }
+
+        .alert-important {
+            background: rgba(99, 102, 241, 0.08);
+            border-color: rgba(99, 102, 241, 0.3);
+            color: #c7d2fe;
+        }
+
+        .alert-icon {
+            font-size: 1.25rem;
+            line-height: 1;
+        }
+
+        /* Code Blocks */
+        .code-container {
+            background: #060911;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: var(--radius-md);
+            margin: 16px 0;
+            overflow: hidden;
+        }
+
+        .code-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 16px;
+            background: rgba(255, 255, 255, 0.03);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            font-family: 'Fira Code', monospace;
+            font-size: 0.82rem;
+            color: var(--text-dim);
+        }
+
+        .copy-btn {
+            background: rgba(255, 255, 255, 0.08);
+            border: none;
+            color: var(--text-muted);
+            padding: 4px 10px;
+            border-radius: 4px;
+            font-size: 0.78rem;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .copy-btn:hover {
+            background: var(--accent-primary);
+            color: #fff;
+        }
+
+        pre {
+            padding: 18px;
+            overflow-x: auto;
+            font-family: 'Fira Code', monospace;
+            font-size: 0.88rem;
+            line-height: 1.6;
+            color: #e2e8f0;
+        }
+
+        code {
+            font-family: 'Fira Code', monospace;
+            background: rgba(99, 102, 241, 0.12);
+            color: #a5b4fc;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 0.88rem;
+        }
+
+        /* Table */
+        .table-responsive {
+            overflow-x: auto;
+            margin: 20px 0;
+            border-radius: var(--radius-md);
+            border: 1px solid var(--border-color);
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            text-align: left;
+            font-size: 0.92rem;
+        }
+
+        th {
+            background: rgba(31, 41, 55, 0.6);
+            color: var(--text-main);
+            font-family: 'Outfit', sans-serif;
+            font-weight: 600;
+            padding: 14px 18px;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        td {
+            padding: 14px 18px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+            color: var(--text-muted);
+        }
+
+        tr:hover td {
+            background: rgba(255, 255, 255, 0.02);
+            color: var(--text-main);
+        }
+
+        /* Method Badge */
+        .method {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 6px;
+            font-weight: 700;
+            font-family: 'Fira Code', monospace;
+            font-size: 0.78rem;
+        }
+
+        .method-post { background: rgba(16, 185, 129, 0.2); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.4); }
+        .method-get { background: rgba(59, 130, 246, 0.2); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.4); }
+
+        /* Print Button / Controls */
+        .toolbar {
+            display: flex;
+            justify-content: flex-end;
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+
+        .btn-action {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 18px;
+            background: rgba(255, 255, 255, 0.06);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-md);
+            color: var(--text-main);
+            font-weight: 600;
+            font-size: 0.9rem;
+            cursor: pointer;
+            transition: all 0.25s;
+            text-decoration: none;
+        }
+
+        .btn-action:hover {
+            background: rgba(99, 102, 241, 0.2);
+            border-color: var(--accent-primary);
+            color: #fff;
+        }
+
+        /* PRINT MEDIA STYLES (For PDF Generation) */
+        @media print {
+            body {
+                background: #ffffff !important;
+                color: #111827 !important;
+                background-image: none !important;
+                padding: 0 !important;
+            }
+
+            .container {
+                max-width: 100% !important;
+                padding: 0 !important;
+            }
+
+            header {
+                border-bottom: 2px solid #e5e7eb !important;
+                padding: 20px 0 !important;
+            }
+
+            h1 {
+                font-size: 2.2rem !important;
+                color: #111827 !important;
+                background: none !important;
+                -webkit-text-fill-color: #111827 !important;
+            }
+
+            .header-subtitle, p, li, td {
+                color: #374151 !important;
+            }
+
+            .nav-tabs, .toolbar, .copy-btn {
+                display: none !important;
+            }
+
+            .content-section {
+                display: block !important;
+                opacity: 1 !important;
+                transform: none !important;
+                margin-bottom: 30px !important;
+            }
+
+            .glass-card {
+                background: #f9fafb !important;
+                border: 1px solid #e5e7eb !important;
+                box-shadow: none !important;
+                break-inside: avoid;
+                margin-bottom: 20px;
+                padding: 20px !important;
+            }
+
+            .card-title, h2, h3, th {
+                color: #111827 !important;
+            }
+
+            .code-container {
+                background: #f3f4f6 !important;
+                border: 1px solid #d1d5db !important;
+            }
+
+            pre {
+                color: #1f2937 !important;
+            }
+
+            code {
+                background: #e5e7eb !important;
+                color: #111827 !important;
+            }
+
+            table {
+                border: 1px solid #d1d5db !important;
+            }
+
+            th {
+                background: #e5e7eb !important;
+            }
+
+            td, th {
+                border-bottom: 1px solid #e5e7eb !important;
+            }
+
+            .alert {
+                border: 1px solid #d1d5db !important;
+                background: #f8fafc !important;
+                color: #1e293b !important;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <!-- Header -->
+        <header>
+            <div class="header-badge">
+                <span class="dot"></span> Persona V3 - Production Deployment & Integration Spec
+            </div>
+            <h1>Persona V3 - VPS Deployment & API Blueprint</h1>
+            <p class="header-subtitle">
+                Official architectural specification for <strong>Persona V3</strong> (<a href="https://github.com/BawanthaBeliwaththa/Persona_V3" target="_blank" style="color:var(--accent-primary); text-decoration:underline;">https://github.com/BawanthaBeliwaththa/Persona_V3</a>). Covers both <strong>Terminal-Free (GUI/PaaS)</strong> and <strong>Terminal (SSH/Systemd/Nginx)</strong> deployment methods, plus frontend team API connection standards.
+            </p>
+        </header>
+
+        <!-- Action Toolbar -->
+        <div class="toolbar" style="margin-top: 24px;">
+            <button class="btn-action" onclick="window.print()">
+                🖨️ Save as PDF / Print
+            </button>
+        </div>
+
+        <!-- Navigation Tabs -->
+        <div class="nav-tabs">
+            <button class="tab-btn active" onclick="switchTab(this, 'vps-deploy-no-cli')">🚀 GUI Deployment (No Terminal)</button>
+            <button class="tab-btn" onclick="switchTab(this, 'vps-deploy-cli')">💻 Terminal Deployment (SSH/Nginx)</button>
+            <button class="tab-btn" onclick="switchTab(this, 'api-integration')">🔌 Frontend API Integration</button>
+            <button class="tab-btn" onclick="switchTab(this, 'code-examples')">📱 Code Examples & Auth</button>
+            <button class="tab-btn" onclick="switchTab(this, 'vps-gotchas')">⚙️ VPS Runtime Rules</button>
+        </div>
+
+        <!-- SECTION 1: GUI DEPLOYMENT (NO TERMINAL) -->
+        <div id="vps-deploy-no-cli" class="content-section active">
+            <h2>Method A: Zero-Terminal VPS Deployment for Persona V3</h2>
+            <p>Deploy <strong>Persona V3</strong> to a VPS without manually running terminal SSH commands using automated browser-based PaaS platforms:</p>
+
+            <div class="grid-3">
+                <div class="glass-card">
+                    <div class="card-header">
+                        <div class="card-icon">📦</div>
+                        <div class="card-title">1. Coolify (PaaS)</div>
+                    </div>
+                    <p><strong>Recommended GUI Method for Persona V3</strong>. Self-hosted web dashboard for managing Docker apps and VPS servers.</p>
+                    <ul>
+                        <li>One-click VPS marketplace install (DigitalOcean/Hetzner).</li>
+                        <li>Connects directly to <code>https://github.com/BawanthaBeliwaththa/Persona_V3</code>.</li>
+                        <li>Auto-installs Docker & Playwright browser binaries.</li>
+                        <li>Automatic SSL (HTTPS) certificate generation.</li>
+                    </ul>
+                </div>
+
+                <div class="glass-card">
+                    <div class="card-header">
+                        <div class="card-icon">⚡</div>
+                        <div class="card-title">2. GitHub Actions CI/CD</div>
+                    </div>
+                    <p>Automate Persona V3 deployment on every <code>git push</code> using GitHub's build runner.</p>
+                    <ul>
+                        <li>You push code updates to <code>BawanthaBeliwaththa/Persona_V3</code>.</li>
+                        <li>GitHub Actions SSHs into VPS silently in background.</li>
+                        <li>Builds Docker image & restarts service automatically.</li>
+                        <li>Zero terminal interaction after initial workflow creation.</li>
+                    </ul>
+                </div>
+
+                <div class="glass-card">
+                    <div class="card-header">
+                        <div class="card-icon">☁️</div>
+                        <div class="card-title">3. Managed Cloud Platforms</div>
+                    </div>
+                    <p>Managed hosting platforms like <strong>Render</strong>, <strong>Railway</strong>, or <strong>Fly.io</strong>.</p>
+                    <ul>
+                        <li>100% web browser managed interface.</li>
+                        <li>No server operating system management.</li>
+                        <li>Auto-detects Dockerfile / Persona V3 Flask app.</li>
+                        <li>Includes free HTTPS domain endpoints.</li>
+                    </ul>
+                </div>
+            </div>
+
+            <h2>Step-by-Step: Coolify GUI Setup for Persona V3</h2>
+            <ol>
+                <li><strong>Create VPS Instance:</strong> Launch an Ubuntu VPS (Hetzner / DigitalOcean / Vultr) with minimum 2GB RAM. Select the <em>Coolify 1-Click App</em> option.</li>
+                <li><strong>Access Web Dashboard:</strong> Open <code>https://YOUR_VPS_IP:8000</code> in your web browser and register your admin account.</li>
+                <li><strong>Connect GitHub:</strong> Go to <strong>Sources &rarr; GitHub App</strong> and authorize Coolify to access <code>BawanthaBeliwaththa/Persona_V3</code> repository.</li>
+                <li><strong>Create New Resource:</strong> Select <code>Persona_V3</code> repository & <code>main</code> branch.</li>
+                <li><strong>Environment Variables:</strong> Set <code>PYTHONUNBUFFERED=1</code>, <code>FLASK_ENV=production</code>.</li>
+                <li><strong>Click Deploy:</strong> Coolify builds the Persona V3 container, runs <code>playwright install chromium</code>, configures your domain with SSL, and handles future auto-redeployments.</li>
+            </ol>
+
+            <div class="code-container">
+                <div class="code-header">
+                    <span>Dockerfile (Placed in Persona_V3 root)</span>
+                    <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                </div>
+                <pre><code>FROM mcr.microsoft.com/playwright/python:v1.45.0-noble
+
+WORKDIR /app
+
+# Copy Persona V3 requirements & install dependencies
+COPY req.txt .
+RUN pip install --no-cache-dir -r req.txt
+
+# Install Playwright browser dependencies
+RUN playwright install chromium
+
+# Copy Persona V3 source code
+COPY . .
+
+# Expose Persona V3 Flask port
+EXPOSE 5000
+
+# Start Persona V3 backend with Gunicorn
+CMD ["gunicorn", "--workers=2", "--threads=4", "--bind=0.0.0.0:5000", "app:app"]</code></pre>
+            </div>
+        </div>
+
+        <!-- SECTION 2: TERMINAL DEPLOYMENT (CLI / SSH) -->
+        <div id="vps-deploy-cli" class="content-section">
+            <h2>Method B: Terminal & SSH VPS Deployment Guide for Persona V3</h2>
+            <p>Deploy <strong>Persona V3</strong> using the Linux SSH command line (Ubuntu 22.04 / 24.04 LTS):</p>
+
+            <div class="grid-2">
+                <div class="glass-card">
+                    <div class="card-header">
+                        <div class="card-icon">🖥️</div>
+                        <div class="card-title">1. Connect & Update Server</div>
+                    </div>
+                    <p>Connect to your VPS server terminal via SSH and install Python 3, Git, Nginx, and system build utilities:</p>
+                    <div class="code-container">
+                        <pre><code>ssh root@YOUR_VPS_IP
+
+# Update apt repositories
+sudo apt update && sudo apt upgrade -y
+
+# Install Python, pip, venv, git, and Nginx
+sudo apt install -y python3 python3-pip python3-venv git curl nginx</code></pre>
+                    </div>
+                </div>
+
+                <div class="glass-card">
+                    <div class="card-header">
+                        <div class="card-icon">📁</div>
+                        <div class="card-title">2. Clone Persona V3 & Setup Virtual Env</div>
+                    </div>
+                    <p>Clone the official Persona V3 repository into <code>/var/www</code> and set up a Python virtual environment:</p>
+                    <div class="code-container">
+                        <pre><code>cd /var/www
+git clone https://github.com/BawanthaBeliwaththa/Persona_V3.git
+cd Persona_V3
+
+# Create & activate venv
+python3 -m venv venv
+source venv/bin/activate
+
+# Install Persona V3 requirements
+pip install --upgrade pip
+pip install -r req.txt</code></pre>
+                    </div>
+                </div>
+            </div>
+
+            <h2>3. Install Playwright & OS Dependencies via Terminal</h2>
+            <p>Install system dependencies for Playwright inside the Persona V3 virtual environment:</p>
+
+            <div class="code-container">
+                <div class="code-header">
+                    <span>Terminal (Playwright & OS Library Installation)</span>
+                    <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                </div>
+                <pre><code># Install Playwright browser binaries & system OS dependencies automatically
+playwright install --with-deps chromium</code></pre>
+            </div>
+
+            <h2>4. Configure Systemd Service (personav3.service)</h2>
+            <p>Create a background system daemon for Persona V3 to ensure continuous uptime and automatic restart on server reboot.</p>
+
+            <div class="code-container">
+                <div class="code-header">
+                    <span>Terminal: sudo nano /etc/systemd/system/personav3.service</span>
+                    <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                </div>
+                <pre><code>[Unit]
+Description=Persona V3 Flask Playwright Service
+After=network.target
+
+[Service]
+User=root
+WorkingDirectory=/var/www/Persona_V3
+Environment="PATH=/var/www/Persona_V3/venv/bin"
+Environment="PYTHONUNBUFFERED=1"
+ExecStart=/var/www/Persona_V3/venv/bin/gunicorn --workers 2 --threads 4 --bind 127.0.0.1:5000 app:app
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target</code></pre>
+            </div>
+
+            <p>Enable and start the service via terminal commands:</p>
+            <div class="code-container">
+                <pre><code># Reload systemd manager & start service
+sudo systemctl daemon-reload
+sudo systemctl start personav3
+sudo systemctl enable personav3
+
+# Verify service status
+sudo systemctl status personav3</code></pre>
+            </div>
+
+            <h2>5. Configure Nginx Reverse Proxy & SSL (HTTPS)</h2>
+            <p>Configure Nginx to proxy incoming API requests to Persona V3 backend on port 5000, supporting Server-Sent Events (SSE):</p>
+
+            <div class="code-container">
+                <div class="code-header">
+                    <span>Terminal: sudo nano /etc/nginx/sites-available/personav3</span>
+                    <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                </div>
+                <pre><code>server {
+    listen 80;
+    server_name api.yourdomain.com; # Or your VPS IP address
+
+    location / {
+        proxy_pass http://127.0.0.1:5000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        # Disable buffering for Persona V3 Server-Sent Events (SSE live status updates)
+        proxy_http_version 1.1;
+        proxy_set_header Connection '';
+        proxy_buffering off;
+        proxy_cache off;
+    }
+}</code></pre>
+            </div>
+
+            <div class="code-container">
+                <div class="code-header">
+                    <span>Terminal Commands (Activate Nginx & Obtain Free SSL Certificate)</span>
+                    <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                </div>
+                <pre><code># Enable site configuration
+sudo ln -s /etc/nginx/sites-available/personav3 /etc/nginx/sites-enabled/
+sudo nginx -t
+sudo systemctl restart nginx
+
+# Obtain SSL Certificate via Certbot (HTTPS)
+sudo apt install -y certbot python3-certbot-nginx
+sudo certbot --nginx -d api.yourdomain.com</code></pre>
+            </div>
+
+            <h2>Persona V3 Terminal Management Cheat Sheet</h2>
+            <div class="table-responsive">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Action Task</th>
+                            <th>Terminal Command</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>View Persona V3 Live App Logs</td>
+                            <td><code>sudo journalctl -u personav3 -f</code></td>
+                        </tr>
+                        <tr>
+                            <td>Restart Persona V3 Service</td>
+                            <td><code>sudo systemctl restart personav3</code></td>
+                        </tr>
+                        <tr>
+                            <td>View Nginx Server Logs</td>
+                            <td><code>sudo tail -f /var/log/nginx/error.log</code></td>
+                        </tr>
+                        <tr>
+                            <td>Pull Latest Code & Restart Persona V3</td>
+                            <td><code>cd /var/www/Persona_V3 && git pull && sudo systemctl restart personav3</code></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- SECTION 3: API INTEGRATION -->
+        <div id="api-integration" class="content-section">
+            <h2>Persona V3 Frontend API Integration Architecture</h2>
+            <p>
+                The separate frontend team (React, Next.js, Vue, iOS/Android) will integrate directly with <strong>Persona V3</strong> backend endpoints.
+            </p>
+
+            <div class="alert alert-tip">
+                <span class="alert-icon">✅</span>
+                <div>
+                    <strong>CORS Enabled:</strong> <code>flask_cors</code> is configured in <code>app.py</code> line 54, allowing external frontend apps to make AJAX / <code>fetch()</code> requests.
+                </div>
+            </div>
+
+            <h2>Persona V3 API Endpoint Reference</h2>
+            <div class="table-responsive">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>HTTP Method</th>
+                            <th>Endpoint Route</th>
+                            <th>Request Body Parameters</th>
+                            <th>Description & Expected Response</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><span class="method method-post">POST</span></td>
+                            <td><code>/api/scraper/init</code></td>
+                            <td>
+                                <code>{ "headless": true, "browser_type": "chromium", "session_name": "default" }</code>
+                            </td>
+                            <td>Initializes Playwright browser session for Persona V3. Returns <code>{"success": true, "message": "Initialized"}</code>.</td>
+                        </tr>
+                        <tr>
+                            <td><span class="method method-post">POST</span></td>
+                            <td><code>/api/scraper/kill-browser</code></td>
+                            <td><code>{}</code></td>
+                            <td>Emergency endpoint to forcefully close browser & kill orphan Chromium processes.</td>
+                        </tr>
+                        <tr>
+                            <td><span class="method method-get">GET</span></td>
+                            <td><code>/admin</code></td>
+                            <td>None</td>
+                            <td>Internal Admin Dashboard template for monitoring live SSE scraper logs.</td>
+                        </tr>
+                        <tr>
+                            <td><span class="method method-get">GET</span></td>
+                            <td><code>/api/events</code></td>
+                            <td>None (EventSource connection)</td>
+                            <td>Server-Sent Events (SSE) stream for real-time progress & status updates.</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <h2>Authentication & CORS Security Configuration</h2>
+            <p>Restrict allowed origins in production so unauthorized web apps cannot access your Persona V3 backend:</p>
+
+            <div class="code-container">
+                <div class="code-header">
+                    <span>app.py (Production CORS & API Key Middleware for Persona V3)</span>
+                    <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                </div>
+                <pre><code>from flask import Flask, request, jsonify
+from flask_cors import CORS
+
+app = Flask(__name__)
+
+# Restrict CORS to trusted Frontend Domains
+ALLOWED_ORIGINS = [
+    "https://your-frontend-team-app.com",
+    "http://localhost:3000"
+]
+CORS(app, resources={r"/api/*": {"origins": ALLOWED_ORIGINS}})
+
+# Persona V3 API Secret Key Protection
+API_SECRET_KEY = os.getenv("API_SECRET_KEY", "your-secure-persona-v3-token-123")
+
+@app.before_request
+def check_api_key():
+    # Allow public index/admin preview, restrict /api/* routes
+    if request.path.startswith('/api/'):
+        auth_header = request.headers.get("Authorization")
+        if not auth_header or auth_header != f"Bearer {API_SECRET_KEY}":
+            return jsonify({"success": False, "error": "Unauthorized Persona V3 Access"}), 401
+</code></pre>
+            </div>
+        </div>
+
+        <!-- SECTION 4: CODE EXAMPLES -->
+        <div id="code-examples" class="content-section">
+            <h2>Frontend Client Request Examples for Persona V3</h2>
+            <p>Share these code snippets with the frontend development team so they can quickly integrate their UI with Persona V3 API endpoints.</p>
+
+            <h3>1. JavaScript / TypeScript (Fetch API)</h3>
+            <div class="code-container">
+                <div class="code-header">
+                    <span>api.js (Frontend Service Layer for Persona V3)</span>
+                    <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                </div>
+                <pre><code>const API_BASE_URL = "https://api.yourdomain.com"; // Your Persona V3 VPS domain
+const API_KEY = "your-secure-persona-v3-token-123";
+
+/**
+ * Initialize Persona V3 Scraper Session
+ */
+export async function initializeScraper() {
+    try {
+        const response = await fetch(`${API_BASE_URL}/api/scraper/init`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${API_KEY}`
+            },
+            body: JSON.stringify({
+                headless: true, // VPS must execute in headless mode!
+                browser_type: 'chromium',
+                session_name: 'client_session_1'
+            })
+        });
+
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Failed to initialize Persona V3');
+        
+        console.log("Persona V3 status:", data);
+        return data;
+    } catch (err) {
+        console.error("Persona V3 API Error:", err);
+        throw err;
+    }
+}
+</code></pre>
+            </div>
+
+            <h3>2. Listening to Live Progress (Server-Sent Events / SSE)</h3>
+            <div class="code-container">
+                <div class="code-header">
+                    <span>sse_client.js (Real-time Progress Tracker)</span>
+                    <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                </div>
+                <pre><code>// Connect to live Persona V3 SSE updates stream
+function listenToScraperProgress(onProgressCallback) {
+    const eventSource = new EventSource(`${API_BASE_URL}/api/events`);
+
+    eventSource.onmessage = (event) => {
+        const payload = JSON.parse(event.data);
+        console.log("Persona V3 Live Update:", payload);
+        onProgressCallback(payload);
+    };
+
+    eventSource.onerror = (err) => {
+        console.error("SSE connection error:", err);
+        eventSource.close();
+    };
+
+    return eventSource;
+}</code></pre>
+            </div>
+        </div>
+
+        <!-- SECTION 5: VPS GOTCHAS -->
+        <div id="vps-gotchas" class="content-section">
+            <h2>Critical Persona V3 VPS Operational Rules</h2>
+            <div class="grid-2">
+                <div class="glass-card">
+                    <div class="card-header">
+                        <div class="card-icon">🖥️</div>
+                        <div class="card-title">1. Mandatory Headless Mode</div>
+                    </div>
+                    <p>
+                        A Linux VPS operates without an X11 graphical display window. 
+                        <strong><code>headless=True</code> must always be set</strong> when calling <code>LinkedInScraper</code> on VPS. If set to <code>False</code>, Playwright will fail to launch Chromium and throw display errors.
+                    </p>
+                </div>
+
+                <div class="glass-card">
+                    <div class="card-header">
+                        <div class="card-icon">🐧</div>
+                        <div class="card-title">2. Linux Process Cleanup Fix</div>
+                    </div>
+                    <p>
+                        In <code>app.py</code> line 126, <code>_kill_playwright_chromium()</code> executes Windows <code>wmic</code> & <code>taskkill</code> commands. 
+                        On a Linux VPS, update process cleanup to use cross-platform <code>psutil</code> or Linux <code>pkill</code> to avoid execution exceptions.
+                    </p>
+                </div>
+            </div>
+
+            <h2>Cross-Platform Process Cleanup Code</h2>
+            <div class="code-container">
+                <div class="code-header">
+                    <span>app.py (Cross-platform Process Cleaner for Persona V3)</span>
+                    <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                </div>
+                <pre><code>def _kill_playwright_chromium():
+    """Cross-platform Chromium process cleaner for Persona V3 (Windows & Linux VPS)"""
+    import os, sys, subprocess
+    try:
+        if sys.platform.startswith('win'):
+            # Windows taskkill logic
+            subprocess.run(['wmic', 'process', 'where',
+                "name='chrome.exe' and CommandLine like '%browser_data%'",
+                'get', 'ProcessId'], capture_output=True, timeout=5)
+        else:
+            # Linux / VPS pkill logic
+            subprocess.run(['pkill', '-f', 'chromium.*browser_data'], capture_output=True, timeout=5)
+    except Exception as ex:
+        print(f"Non-fatal process cleanup warning: {ex}")</code></pre>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        function switchTab(btn, tabId) {
+            // Remove active class from all tabs and sections
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            document.querySelectorAll('.content-section').forEach(sec => sec.classList.remove('active'));
+
+            // Find clicked button & matching section
+            btn.classList.add('active');
+            document.getElementById(tabId).classList.add('active');
+        }
+
+        function copyCode(button) {
+            const pre = button.parentElement.nextElementSibling;
+            const code = pre.querySelector('code').innerText;
+            
+            navigator.clipboard.writeText(code).then(() => {
+                const originalText = button.innerText;
+                button.innerText = 'Copied!';
+                button.style.background = '#10b981';
+                button.style.color = '#fff';
+                
+                setTimeout(() => {
+                    button.innerText = originalText;
+                    button.style.background = '';
+                    button.style.color = '';
+                }, 2000);
+            });
+        }
+    </script>
+</body>
+</html>

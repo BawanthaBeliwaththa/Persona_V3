@@ -1,0 +1,879 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Persona V3 - Complete System & Deployment Guide</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #0b0f19;
+            --bg-secondary: #111827;
+            --bg-card: rgba(17, 24, 39, 0.75);
+            --bg-card-hover: rgba(31, 41, 55, 0.85);
+            --border-color: rgba(255, 255, 255, 0.08);
+            --border-glow: rgba(99, 102, 241, 0.4);
+            
+            --text-main: #f3f4f6;
+            --text-muted: #9ca3af;
+            --text-dim: #6b7280;
+
+            --accent-primary: #6366f1;
+            --accent-secondary: #a855f7;
+            --accent-pink: #ec4899;
+            --accent-cyan: #06b6d4;
+            --accent-emerald: #10b981;
+            --accent-amber: #f59e0b;
+            --accent-blue: #0a66c2;
+
+            --gradient-brand: linear-gradient(135deg, #0a66c2 0%, #6366f1 50%, #a855f7 100%);
+            --gradient-glow: radial-gradient(circle at 50% 0%, rgba(10, 102, 194, 0.2), transparent 70%);
+
+            --radius-sm: 8px;
+            --radius-md: 14px;
+            --radius-lg: 20px;
+            --shadow-glow: 0 8px 32px 0 rgba(99, 102, 241, 0.25);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background-color: var(--bg-primary);
+            color: var(--text-main);
+            line-height: 1.6;
+            background-image: var(--gradient-glow);
+            background-attachment: fixed;
+            min-height: 100vh;
+            padding-bottom: 60px;
+        }
+
+        .container {
+            max-width: 1240px;
+            margin: 0 auto;
+            padding: 0 24px;
+        }
+
+        /* Header */
+        header {
+            padding: 48px 0 32px 0;
+            border-bottom: 1px solid var(--border-color);
+            position: relative;
+        }
+
+        .header-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 14px;
+            background: rgba(10, 102, 194, 0.15);
+            border: 1px solid rgba(10, 102, 194, 0.35);
+            border-radius: 50px;
+            color: #60a5fa;
+            font-size: 0.85rem;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+            margin-bottom: 16px;
+        }
+
+        .header-badge .dot {
+            width: 8px;
+            height: 8px;
+            background-color: var(--accent-emerald);
+            border-radius: 50%;
+            box-shadow: 0 0 10px var(--accent-emerald);
+        }
+
+        h1 {
+            font-family: 'Outfit', sans-serif;
+            font-size: 2.8rem;
+            font-weight: 800;
+            letter-spacing: -0.02em;
+            background: var(--gradient-brand);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 12px;
+        }
+
+        .header-subtitle {
+            font-size: 1.15rem;
+            color: var(--text-muted);
+            max-width: 900px;
+        }
+
+        .repo-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            color: #60a5fa;
+            text-decoration: none;
+            font-weight: 600;
+        }
+
+        .repo-link:hover {
+            text-decoration: underline;
+        }
+
+        /* Navigation Bar */
+        .nav-tabs {
+            display: flex;
+            gap: 10px;
+            margin: 32px 0 24px 0;
+            padding: 6px;
+            background: rgba(17, 24, 39, 0.85);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-md);
+            backdrop-filter: blur(12px);
+            overflow-x: auto;
+        }
+
+        .tab-btn {
+            padding: 12px 20px;
+            background: transparent;
+            border: none;
+            border-radius: var(--radius-sm);
+            color: var(--text-muted);
+            font-family: 'Inter', sans-serif;
+            font-size: 0.92rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.25s ease;
+            white-space: nowrap;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .tab-btn:hover {
+            color: var(--text-main);
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .tab-btn.active {
+            background: var(--accent-blue);
+            color: #ffffff;
+            box-shadow: 0 4px 14px rgba(10, 102, 194, 0.4);
+        }
+
+        /* Section Layout */
+        .content-section {
+            display: none;
+            animation: fadeIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+
+        .content-section.active {
+            display: block;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Cards & Grid */
+        .grid-2 {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+            gap: 24px;
+            margin-top: 20px;
+        }
+
+        .grid-3 {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+
+        .glass-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-lg);
+            padding: 28px;
+            backdrop-filter: blur(16px);
+            transition: all 0.3s ease;
+            position: relative;
+        }
+
+        .glass-card:hover {
+            border-color: var(--border-glow);
+            box-shadow: var(--shadow-glow);
+            transform: translateY(-2px);
+        }
+
+        .card-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+
+        .card-icon {
+            width: 44px;
+            height: 44px;
+            border-radius: var(--radius-md);
+            background: rgba(10, 102, 194, 0.18);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.4rem;
+            color: #60a5fa;
+        }
+
+        .card-title {
+            font-family: 'Outfit', sans-serif;
+            font-size: 1.35rem;
+            font-weight: 700;
+            color: var(--text-main);
+        }
+
+        /* Typography & Content */
+        h2 {
+            font-family: 'Outfit', sans-serif;
+            font-size: 1.8rem;
+            font-weight: 700;
+            margin: 32px 0 16px 0;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        h2::before {
+            content: '';
+            display: inline-block;
+            width: 4px;
+            height: 24px;
+            background: var(--gradient-brand);
+            border-radius: 4px;
+        }
+
+        h3 {
+            font-family: 'Outfit', sans-serif;
+            font-size: 1.25rem;
+            font-weight: 600;
+            margin: 20px 0 10px 0;
+            color: #e5e7eb;
+        }
+
+        p {
+            color: var(--text-muted);
+            font-size: 0.98rem;
+            margin-bottom: 14px;
+        }
+
+        ul, ol {
+            margin-left: 20px;
+            color: var(--text-muted);
+            margin-bottom: 16px;
+        }
+
+        li {
+            margin-bottom: 8px;
+        }
+
+        strong {
+            color: var(--text-main);
+        }
+
+        /* Step Card */
+        .step-card {
+            background: rgba(17, 24, 39, 0.6);
+            border-left: 4px solid var(--accent-blue);
+            padding: 20px;
+            border-radius: 0 var(--radius-md) var(--radius-md) 0;
+            margin-bottom: 16px;
+        }
+
+        .step-number {
+            font-family: 'Outfit', sans-serif;
+            font-weight: 800;
+            color: var(--accent-blue);
+            font-size: 1.1rem;
+            margin-bottom: 6px;
+        }
+
+        /* Alerts / Banners */
+        .alert {
+            padding: 16px 20px;
+            border-radius: var(--radius-md);
+            margin: 20px 0;
+            display: flex;
+            gap: 14px;
+            align-items: flex-start;
+            border: 1px solid transparent;
+        }
+
+        .alert-tip {
+            background: rgba(16, 185, 129, 0.08);
+            border-color: rgba(16, 185, 129, 0.3);
+            color: #a7f3d0;
+        }
+
+        .alert-warning {
+            background: rgba(245, 158, 11, 0.08);
+            border-color: rgba(245, 158, 11, 0.3);
+            color: #fde68a;
+        }
+
+        .alert-important {
+            background: rgba(10, 102, 194, 0.12);
+            border-color: rgba(10, 102, 194, 0.35);
+            color: #93c5fd;
+        }
+
+        /* Code Blocks */
+        .code-container {
+            background: #060911;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: var(--radius-md);
+            margin: 16px 0;
+            overflow: hidden;
+        }
+
+        .code-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 16px;
+            background: rgba(255, 255, 255, 0.03);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            font-family: 'Fira Code', monospace;
+            font-size: 0.82rem;
+            color: var(--text-dim);
+        }
+
+        .copy-btn {
+            background: rgba(255, 255, 255, 0.08);
+            border: none;
+            color: var(--text-muted);
+            padding: 4px 10px;
+            border-radius: 4px;
+            font-size: 0.78rem;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .copy-btn:hover {
+            background: var(--accent-blue);
+            color: #fff;
+        }
+
+        pre {
+            padding: 18px;
+            overflow-x: auto;
+            font-family: 'Fira Code', monospace;
+            font-size: 0.88rem;
+            line-height: 1.6;
+            color: #e2e8f0;
+        }
+
+        code {
+            font-family: 'Fira Code', monospace;
+            background: rgba(10, 102, 194, 0.15);
+            color: #93c5fd;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 0.88rem;
+        }
+
+        /* Table */
+        .table-responsive {
+            overflow-x: auto;
+            margin: 20px 0;
+            border-radius: var(--radius-md);
+            border: 1px solid var(--border-color);
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            text-align: left;
+            font-size: 0.92rem;
+        }
+
+        th {
+            background: rgba(31, 41, 55, 0.6);
+            color: var(--text-main);
+            font-family: 'Outfit', sans-serif;
+            font-weight: 600;
+            padding: 14px 18px;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        td {
+            padding: 14px 18px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+            color: var(--text-muted);
+        }
+
+        tr:hover td {
+            background: rgba(255, 255, 255, 0.02);
+            color: var(--text-main);
+        }
+
+        .method {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 6px;
+            font-weight: 700;
+            font-family: 'Fira Code', monospace;
+            font-size: 0.78rem;
+        }
+
+        .method-post { background: rgba(16, 185, 129, 0.2); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.4); }
+        .method-get { background: rgba(59, 130, 246, 0.2); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.4); }
+
+        .toolbar {
+            display: flex;
+            justify-content: flex-end;
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+
+        .btn-action {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 18px;
+            background: rgba(255, 255, 255, 0.06);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-md);
+            color: var(--text-main);
+            font-weight: 600;
+            font-size: 0.9rem;
+            cursor: pointer;
+            transition: all 0.25s;
+            text-decoration: none;
+        }
+
+        .btn-action:hover {
+            background: rgba(10, 102, 194, 0.25);
+            border-color: var(--accent-blue);
+            color: #fff;
+        }
+
+        @media print {
+            body {
+                background: #ffffff !important;
+                color: #111827 !important;
+                background-image: none !important;
+                padding: 0 !important;
+            }
+
+            .container {
+                max-width: 100% !important;
+                padding: 0 !important;
+            }
+
+            header {
+                border-bottom: 2px solid #e5e7eb !important;
+                padding: 20px 0 !important;
+            }
+
+            h1 {
+                font-size: 2.2rem !important;
+                color: #111827 !important;
+                background: none !important;
+                -webkit-text-fill-color: #111827 !important;
+            }
+
+            .header-subtitle, p, li, td {
+                color: #374151 !important;
+            }
+
+            .nav-tabs, .toolbar, .copy-btn {
+                display: none !important;
+            }
+
+            .content-section {
+                display: block !important;
+                opacity: 1 !important;
+                transform: none !important;
+                margin-bottom: 30px !important;
+            }
+
+            .glass-card, .step-card {
+                background: #f9fafb !important;
+                border: 1px solid #e5e7eb !important;
+                box-shadow: none !important;
+                break-inside: avoid;
+                margin-bottom: 20px;
+                padding: 20px !important;
+            }
+
+            .card-title, h2, h3, th {
+                color: #111827 !important;
+            }
+
+            .code-container {
+                background: #f3f4f6 !important;
+                border: 1px solid #d1d5db !important;
+            }
+
+            pre {
+                color: #1f2937 !important;
+            }
+
+            code {
+                background: #e5e7eb !important;
+                color: #111827 !important;
+            }
+
+            table {
+                border: 1px solid #d1d5db !important;
+            }
+
+            th {
+                background: #e5e7eb !important;
+            }
+
+            td, th {
+                border-bottom: 1px solid #e5e7eb !important;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <!-- Header -->
+        <header>
+            <div class="header-badge">
+                <span class="dot"></span> Official System Guide & Architecture
+            </div>
+            <h1>Persona V3 — Complete User & Deployment Manual</h1>
+            <p class="header-subtitle">
+                Comprehensive step-by-step operating and deployment manual for <strong>Persona V3</strong> (<a href="https://github.com/BawanthaBeliwaththa/Persona_V3" target="_blank" class="repo-link">github.com/BawanthaBeliwaththa/Persona_V3</a>). 
+                Learn how to install locally, operate the Admin and Client portals, manage the Task Bucket queue, deploy to a VPS (GUI & Terminal), and connect external frontend applications to the API.
+            </p>
+        </header>
+
+        <!-- Action Toolbar -->
+        <div class="toolbar" style="margin-top: 24px;">
+            <button class="btn-action" onclick="window.print()">
+                🖨️ Print / Export PDF
+            </button>
+        </div>
+
+        <!-- Navigation Tabs -->
+        <div class="nav-tabs">
+            <button class="tab-btn active" onclick="switchTab(this, 'sys-overview')">📌 System Architecture</button>
+            <button class="tab-btn" onclick="switchTab(this, 'local-setup')">💻 How to Install & Run Locally</button>
+            <button class="tab-btn" onclick="switchTab(this, 'user-guide')">⚙️ How to Use Admin & Client Portals</button>
+            <button class="tab-btn" onclick="switchTab(this, 'vps-gui')">🚀 VPS Deployment (GUI / Coolify)</button>
+            <button class="tab-btn" onclick="switchTab(this, 'vps-cli')">🖥️ VPS Deployment (Terminal / SSH)</button>
+            <button class="tab-btn" onclick="switchTab(this, 'api-guide')">🔌 Frontend API Integration</button>
+        </div>
+
+        <!-- SECTION 1: SYSTEM OVERVIEW -->
+        <div id="sys-overview" class="content-section active">
+            <h2>Persona V3 Architecture Overview</h2>
+            <p>
+                <strong>Persona V3</strong> is an enterprise-grade LinkedIn profile extraction, search, and candidate ranking system built with Flask, Playwright (Chromium), Pydantic, and Server-Sent Events (SSE).
+            </p>
+
+            <div class="grid-3">
+                <div class="glass-card">
+                    <div class="card-header">
+                        <div class="card-icon">⚡</div>
+                        <div class="card-title">Flask & Async Loop</div>
+                    </div>
+                    <p>Uses a multi-threaded Flask core with a dedicated background <code>asyncio</code> event loop to run Playwright browser operations smoothly without blocking HTTP endpoints.</p>
+                </div>
+
+                <div class="glass-card">
+                    <div class="card-header">
+                        <div class="card-icon">🗂️</div>
+                        <div class="card-title">Task Bucket Queue</div>
+                    </div>
+                    <p>Automated rate-limited queue manager. Tasks are processed sequentially with customizable rest periods (default: 30s) to prevent LinkedIn account rate limits.</p>
+                </div>
+
+                <div class="glass-card">
+                    <div class="card-header">
+                        <div class="card-icon">📡</div>
+                        <div class="card-title">Real-Time SSE Stream</div>
+                    </div>
+                    <p>Server-Sent Events (SSE) stream live log events, queue statuses, and worker rest timers directly to admin and client UI dashboards without polling.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- SECTION 2: LOCAL SETUP -->
+        <div id="local-setup" class="content-section">
+            <h2>How to Install and Run Persona V3 Locally</h2>
+            <p>Follow these 5 exact steps to set up and run Persona V3 on your development computer:</p>
+
+            <div class="step-card">
+                <div class="step-number">STEP 1: Clone Repository</div>
+                <p>Open your terminal or command prompt and clone the Persona V3 repository from GitHub:</p>
+                <div class="code-container">
+                    <pre><code>git clone https://github.com/BawanthaBeliwaththa/Persona_V3.git
+cd Persona_V3</code></pre>
+                </div>
+            </div>
+
+            <div class="step-card">
+                <div class="step-number">STEP 2: Create Python Virtual Environment</div>
+                <p>Create and activate an isolated Python 3.10+ virtual environment:</p>
+                <div class="code-container">
+                    <pre><code># On Windows (PowerShell/CMD):
+python -m venv venv
+venv\Scripts\activate
+
+# On Linux / macOS:
+python3 -m venv venv
+source venv/bin/activate</code></pre>
+                </div>
+            </div>
+
+            <div class="step-card">
+                <div class="step-number">STEP 3: Install Required Dependencies</div>
+                <p>Install all required Python packages listed in <code>req.txt</code>:</p>
+                <div class="code-container">
+                    <pre><code>pip install --upgrade pip
+pip install -r req.txt</code></pre>
+                </div>
+            </div>
+
+            <div class="step-card">
+                <div class="step-number">STEP 4: Install Playwright Chromium Browser</div>
+                <p>Download and install Playwright's headless Chromium browser binary:</p>
+                <div class="code-container">
+                    <pre><code>playwright install chromium</code></pre>
+                </div>
+            </div>
+
+            <div class="step-card">
+                <div class="step-number">STEP 5: Launch Persona V3 Web Application</div>
+                <p>Start the Flask development server:</p>
+                <div class="code-container">
+                    <pre><code>python app.py</code></pre>
+                </div>
+                <p>Open your browser and navigate to:</p>
+                <ul>
+                    <li>Client Portal: <code>http://localhost:5000/</code></li>
+                    <li>Admin Portal: <code>http://localhost:5000/admin</code></li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- SECTION 3: USER GUIDE -->
+        <div id="user-guide" class="content-section">
+            <h2>How to Use the Portals & Task Bucket</h2>
+            
+            <div class="grid-2">
+                <div class="glass-card">
+                    <div class="card-header">
+                        <div class="card-icon">🛠️</div>
+                        <div class="card-title">1. Admin Portal (`/admin`)</div>
+                    </div>
+                    <ol>
+                        <li><strong>Initialize Scraper:</strong> Enter session name, select Headless (Off for local setup, On for VPS), and click <em>Initialize Browser</em>.</li>
+                        <li><strong>Authenticate:</strong> Enter your LinkedIn credentials and click <em>Login</em> (or authenticate manually if security verification appears).</li>
+                        <li><strong>Task Bucket Management:</strong> Navigate to the <em>Task Bucket</em> tab. Add keyword searches or LinkedIn URLs. Set the rest timer (e.g. 30s) and click <em>Resume</em>.</li>
+                        <li><strong>Export Master Data:</strong> Download complete scraped profiles in JSON or CSV format.</li>
+                    </ol>
+                </div>
+
+                <div class="glass-card">
+                    <div class="card-header">
+                        <div class="card-icon">👤</div>
+                        <div class="card-title">2. Client Portal (`/`)</div>
+                    </div>
+                    <ol>
+                        <li><strong>Direct Search:</strong> Enter a LinkedIn username (e.g., <code>beliwaththa</code>) or full profile URL and click <em>Search & Extract All</em>.</li>
+                        <li><strong>Reference Tracking:</strong> Each search generates a unique Reference Code (e.g. <code>REF-8F42A1</code>). Use this code anytime to reload cached results.</li>
+                        <li><strong>Bulk CSV/JSON Import:</strong> Upload a list of queries or URLs in CSV or JSON format to queue multiple extractions.</li>
+                        <li><strong>PDF Report Export:</strong> Click <em>Export Full Text as PDF</em> to print candidate profile reports.</li>
+                    </ol>
+                </div>
+            </div>
+        </div>
+
+        <!-- SECTION 4: VPS GUI -->
+        <div id="vps-gui" class="content-section">
+            <h2>How to Deploy to VPS Without Terminal (Coolify / PaaS)</h2>
+            <p>Deploy Persona V3 using a browser UI without typing terminal SSH commands:</p>
+
+            <div class="step-card">
+                <div class="step-number">Step 1: Launch VPS with Coolify</div>
+                <p>Create an Ubuntu VPS on DigitalOcean or Hetzner using the 1-Click Coolify marketplace image.</p>
+            </div>
+
+            <div class="step-card">
+                <div class="step-number">Step 2: Connect GitHub Repository</div>
+                <p>Open <code>https://YOUR_VPS_IP:8000</code>, go to <strong>Sources &rarr; GitHub</strong>, and select <code>BawanthaBeliwaththa/Persona_V3</code>.</p>
+            </div>
+
+            <div class="step-card">
+                <div class="step-number">Step 3: Environment Configuration & Deploy</div>
+                <p>Add environment variables (<code>PYTHONUNBUFFERED=1</code>), click <strong>Deploy</strong>. Coolify builds your container using the project Dockerfile automatically.</p>
+            </div>
+
+            <div class="code-container">
+                <div class="code-header">
+                    <span>Dockerfile (Included in Repository Root)</span>
+                    <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                </div>
+                <pre><code>FROM mcr.microsoft.com/playwright/python:v1.45.0-noble
+
+WORKDIR /app
+
+COPY req.txt .
+RUN pip install --no-cache-dir -r req.txt
+RUN playwright install chromium
+
+COPY . .
+
+EXPOSE 5000
+CMD ["gunicorn", "--workers=2", "--threads=4", "--bind=0.0.0.0:5000", "app:app"]</code></pre>
+            </div>
+        </div>
+
+        <!-- SECTION 5: VPS CLI -->
+        <div id="vps-cli" class="content-section">
+            <h2>How to Deploy to VPS Using SSH Terminal</h2>
+            <p>Follow these terminal commands on Ubuntu 22.04 / 24.04 LTS to set up Persona V3 manually:</p>
+
+            <div class="code-container">
+                <div class="code-header">
+                    <span>Terminal Commands (SSH & System Setup)</span>
+                    <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                </div>
+                <pre><code># 1. Connect & install OS packages
+ssh root@YOUR_VPS_IP
+sudo apt update && sudo apt upgrade -y
+sudo apt install -y python3 python3-pip python3-venv git curl nginx
+
+# 2. Clone Persona V3 repo & setup virtual environment
+cd /var/www
+git clone https://github.com/BawanthaBeliwaththa/Persona_V3.git
+cd Persona_V3
+python3 -m venv venv
+source venv/bin/activate
+pip install -r req.txt
+
+# 3. Install Playwright browser & Linux system OS dependencies
+playwright install --with-deps chromium</code></pre>
+            </div>
+
+            <h2>Configure Systemd Background Service</h2>
+            <div class="code-container">
+                <div class="code-header">
+                    <span>Terminal: sudo nano /etc/systemd/system/personav3.service</span>
+                    <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                </div>
+                <pre><code>[Unit]
+Description=Persona V3 Flask Service
+After=network.target
+
+[Service]
+User=root
+WorkingDirectory=/var/www/Persona_V3
+Environment="PATH=/var/www/Persona_V3/venv/bin"
+Environment="PYTHONUNBUFFERED=1"
+ExecStart=/var/www/Persona_V3/venv/bin/gunicorn --workers 2 --threads 4 --bind 127.0.0.1:5000 app:app
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target</code></pre>
+            </div>
+
+            <div class="code-container">
+                <pre><code>sudo systemctl daemon-reload
+sudo systemctl start personav3
+sudo systemctl enable personav3</code></pre>
+            </div>
+        </div>
+
+        <!-- SECTION 6: API INTEGRATION -->
+        <div id="api-guide" class="content-section">
+            <h2>How External Frontend Teams Connect to Persona V3 API</h2>
+            <p>The separate frontend development team can connect their UI (React, Next.js, Vue, Mobile) directly to Persona V3 endpoints.</p>
+
+            <div class="table-responsive">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Method</th>
+                            <th>Endpoint Route</th>
+                            <th>Payload / Description</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><span class="method method-post">POST</span></td>
+                            <td><code>/api/scraper/init</code></td>
+                            <td><code>{"headless": true, "session_name": "default"}</code> — Init browser</td>
+                        </tr>
+                        <tr>
+                            <td><span class="method method-post">POST</span></td>
+                            <td><code>/api/client/scrape</code></td>
+                            <td><code>{"name": "https://linkedin.com/in/username"}</code> — Extract profile</td>
+                        </tr>
+                        <tr>
+                            <td><span class="method method-get">GET</span></td>
+                            <td><code>/api/events</code></td>
+                            <td>EventSource stream for live SSE status events</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <h2>JavaScript Integration Snippet</h2>
+            <div class="code-container">
+                <div class="code-header">
+                    <span>api.js (Frontend Service)</span>
+                    <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                </div>
+                <pre><code>const API_BASE_URL = "https://api.yourdomain.com";
+
+// Execute Persona V3 extraction
+async function extractProfile(urlOrName) {
+    const res = await fetch(`${API_BASE_URL}/api/client/scrape`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: urlOrName })
+    });
+    return await res.json();
+}</code></pre>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        function switchTab(btn, tabId) {
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            document.querySelectorAll('.content-section').forEach(sec => sec.classList.remove('active'));
+            btn.classList.add('active');
+            document.getElementById(tabId).classList.add('active');
+        }
+
+        function copyCode(button) {
+            const pre = button.parentElement.nextElementSibling;
+            const code = pre.querySelector('code').innerText;
+            navigator.clipboard.writeText(code).then(() => {
+                const originalText = button.innerText;
+                button.innerText = 'Copied!';
+                button.style.background = '#10b981';
+                button.style.color = '#fff';
+                setTimeout(() => {
+                    button.innerText = originalText;
+                    button.style.background = '';
+                    button.style.color = '';
+                }, 2000);
+            });
+        }
+    </script>
+</body>
+</html>

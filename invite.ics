@@ -1,0 +1,77 @@
+BEGIN:VCALENDAR
+METHOD:REQUEST
+PRODID:Microsoft Exchange Server 2010
+VERSION:2.0
+BEGIN:VTIMEZONE
+TZID:Sri Lanka Standard Time
+BEGIN:STANDARD
+DTSTART:16010101T000000
+TZOFFSETFROM:+0530
+TZOFFSETTO:+0530
+END:STANDARD
+BEGIN:DAYLIGHT
+DTSTART:16010101T000000
+TZOFFSETFROM:+0530
+TZOFFSETTO:+0530
+END:DAYLIGHT
+END:VTIMEZONE
+BEGIN:VEVENT
+ORGANIZER;CN=Chamitha de Silva:mailto:chamithas@slt.com.lk
+ATTENDEE;ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION;RSVP=TRUE;CN=Charitha S
+ amaranayaka:mailto:charitha@slt.com.lk
+ATTENDEE;ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION;RSVP=TRUE;CN=Lahiru Kul
+ arathna:mailto:lahirus@slt.com.lk
+ATTENDEE;ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION;RSVP=TRUE;CN=bawanthabe
+ liwaththa@gmail.com:mailto:bawanthabeliwaththa@gmail.com
+ATTENDEE;ROLE=OPT-PARTICIPANT;PARTSTAT=NEEDS-ACTION;RSVP=TRUE;CN=Ravin Thar
+ inda:mailto:tharinda@slt.com.lk
+ATTENDEE;ROLE=OPT-PARTICIPANT;PARTSTAT=NEEDS-ACTION;RSVP=TRUE;CN=Kosala Ten
+ nakoon:mailto:kosalat@slt.com.lk
+DESCRIPTION;LANGUAGE=en-US:CONFIDENTIALITY NOTICE\nThis message is intended
+  only for the use of the individual or entity to which it is addressed and
+  may contain information that is confidential and/or privileged. If you ar
+ e not the intended recipient please delete the original message and any co
+ py of it from your computer system. You are hereby notified that any disse
+ mination\, distribution or copying of this communication is strictly prohi
+ bited unless proper authorization has been obtained for such action. If yo
+ u have received this communication in error\, please notify the sender imm
+ ediately. Although SLT attempts to sweep e-mail and attachments for viruse
+ s\, it does not guarantee that both are virus-free and accepts no liabilit
+ y for any damage sustained as a result of viruses.\n
+UID:040000008200E00074C5B7101A82E0080000000020DF06AD6125DD01000000000000000
+ 010000000F83198F156551C4B9C05C89F48C8AE8E
+SUMMARY;LANGUAGE=en-US:LLM Development for SME Xcelerate - III
+DTSTART;TZID=Sri Lanka Standard Time:20260812T133000
+DTEND;TZID=Sri Lanka Standard Time:20260812T153000
+CLASS:PUBLIC
+PRIORITY:5
+DTSTAMP:20260810T062353Z
+TRANSP:OPAQUE
+STATUS:CONFIRMED
+SEQUENCE:2
+LOCATION;LANGUAGE=en-US:Digital Projects Meeting Room\, 9th Floor\, SLT HQ
+X-MICROSOFT-CDO-APPT-SEQUENCE:2
+X-MICROSOFT-CDO-OWNERAPPTID:2124951996
+X-MICROSOFT-CDO-BUSYSTATUS:TENTATIVE
+X-MICROSOFT-CDO-INTENDEDSTATUS:BUSY
+X-MICROSOFT-CDO-ALLDAYEVENT:FALSE
+X-MICROSOFT-CDO-IMPORTANCE:1
+X-MICROSOFT-CDO-INSTTYPE:0
+X-MICROSOFT-DONOTFORWARDMEETING:FALSE
+X-MICROSOFT-DISALLOW-COUNTER:FALSE
+X-MICROSOFT-REQUESTEDATTENDANCEMODE:DEFAULT
+X-MICROSOFT-ISRESPONSEREQUESTED:TRUE
+X-MICROSOFT-LOCATIONDISPLAYNAME:Digital Projects Meeting Room\, 9th Floor\,
+  SLT HQ
+X-MICROSOFT-LOCATIONSOURCE:None
+X-MICROSOFT-LOCATIONS:[{"DisplayName":"Digital Projects Meeting Room\, 9th 
+ Floor\, SLT HQ"\,"LocationAnnotation":""\,"LocationUri":""\,"LocationStree
+ t":""\,"LocationCity":""\,"LocationState":""\,"LocationCountry":""\,"Locat
+ ionPostalCode":""\,"LocationFullAddress":""}]
+BEGIN:VALARM
+DESCRIPTION:REMINDER
+TRIGGER;RELATED=START:-PT15M
+ACTION:DISPLAY
+END:VALARM
+END:VEVENT
+END:VCALENDAR
