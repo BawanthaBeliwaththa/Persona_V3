@@ -2108,7 +2108,28 @@ class LinkedInScraper:
             results = await self.page.evaluate('''() => {
                 const res = [];
                 const seen = new Set();
-                const containers = document.querySelectorAll('li.reusable-search__result-container, .entity-result__item');
+
+                // Strategy 1: Try multiple known LinkedIn search card selectors
+                const cardSelectors = [
+                    'li.reusable-search__result-container',
+                    'li.search-results__list-item',
+                    '.entity-result',
+                    '.search-result',
+                    'li[data-chameleon-result-urn]',
+                    '[data-view-name="search-entity-result-universal-template"]',
+                    'ul.reusable-search__entity-result-list > li',
+                    '.scaffold-finite-scroll__content li',
+                ];
+
+                let containers = [];
+                for (const sel of cardSelectors) {
+                    const found = Array.from(document.querySelectorAll(sel));
+                    if (found.length > 0) {
+                        containers = found;
+                        break;
+                    }
+                }
+
                 if (containers.length > 0) {
                     for (let card of containers) {
                         let a = card.querySelector('a[href*="/in/"]');
@@ -2117,69 +2138,101 @@ class LinkedInScraper:
                         if (!href || href.includes('/search/')) continue;
                         let url = href.split('?')[0];
                         if (!url.startsWith('http')) url = 'https://www.linkedin.com' + url;
-                        if (!seen.has(url)) {
-                            seen.add(url);
-                            let nameEl = card.querySelector('.entity-result__title-text a, .entity-result__title-text') || a;
-                            let name = nameEl.innerText.trim().split('\\n')[0];
-                            if (!name) name = url.split('/in/')[1] || '';
-                            let img = '';
-                            let imgs = card.querySelectorAll('img');
-                            for (let im of imgs) {
-                                let src = im.src || im.getAttribute('data-delayed-url') || '';
-                                if (src && src.includes('licdn.com')) {
-                                    if (!src.includes('company-logo') && !src.includes('ghost-person')) {
-                                        img = src;
-                                        break;
-                                    }
-                                }
+                        if (seen.has(url)) continue;
+                        seen.add(url);
+
+                        // Name: try multiple selectors
+                        let name = '';
+                        const nameSelectors = [
+                            '.entity-result__title-text a span[aria-hidden="true"]',
+                            '.entity-result__title-text a',
+                            '.entity-result__title-text',
+                            '.artdeco-entity-lockup__title',
+                            'span[dir="ltr"]',
+                        ];
+                        for (const ns of nameSelectors) {
+                            const el = card.querySelector(ns);
+                            if (el && el.innerText.trim()) {
+                                name = el.innerText.trim().split('\\n')[0].trim();
+                                break;
                             }
-                            let headline = '';
-                            let hlEl = card.querySelector('.entity-result__primary-subtitle');
-                            if (hlEl) headline = hlEl.innerText.trim();
-                            res.push({ profile_url: url, name: name, profile_picture: img, headline: headline });
                         }
+                        if (!name) name = a.innerText.trim().split('\\n')[0].trim();
+                        if (!name) name = url.split('/in/')[1]?.replace(/-/g, ' ') || '';
+
+                        // Profile image
+                        let img = '';
+                        for (let im of card.querySelectorAll('img')) {
+                            let src = im.src || im.getAttribute('data-delayed-url') || '';
+                            if (src && src.includes('licdn.com') &&
+                                !src.includes('company-logo') && !src.includes('ghost-person')) {
+                                img = src;
+                                break;
+                            }
+                        }
+
+                        // Headline
+                        let headline = '';
+                        const hlEl = card.querySelector(
+                            '.entity-result__primary-subtitle, .artdeco-entity-lockup__subtitle, .entity-result__summary'
+                        );
+                        if (hlEl) headline = hlEl.innerText.trim();
+
+                        res.push({ profile_url: url, name: name, profile_picture: img, headline: headline });
                     }
-                } else {
+                }
+
+                // Strategy 2: Pure link fallback if card selectors yielded nothing
+                if (res.length === 0) {
                     const links = document.querySelectorAll('a[href*="/in/"]');
                     for (let a of links) {
                         let href = a.getAttribute('href');
                         if (!href || href.includes('/search/')) continue;
                         let url = href.split('?')[0];
                         if (!url.startsWith('http')) url = 'https://www.linkedin.com' + url;
-                        if (!seen.has(url)) {
-                            seen.add(url);
-                            let name = a.innerText.trim();
-                            if (!name) name = url.split('/in/')[1] || '';
-                            res.push({ profile_url: url, name: name, profile_picture: '' });
-                        }
+                        if (seen.has(url)) continue;
+                        seen.add(url);
+                        let name = a.innerText.trim().split('\\n')[0].trim();
+                        if (!name) name = url.split('/in/')[1]?.replace(/-/g, ' ') || '';
+                        res.push({ profile_url: url, name: name, profile_picture: '', headline: '' });
                     }
                 }
+
                 return res;
             }''')
-            query_words = [w.lower() for w in (first_name + " " + last_name).split() if len(w) > 1]
+            # Filter query words — skip very short/common words, only use meaningful terms
+            _SKIP_WORDS = {'sri', 'lanka', 'lankan', 'inc', 'corp', 'limited', 'co', 'the', 'and', 'of'}
+            query_words = [
+                w.lower() for w in (first_name + " " + last_name).split()
+                if len(w) > 1 and w.lower() not in _SKIP_WORDS
+            ]
             filtered_results = []
             for r in results:
                 name_lower = r.get('name', '').lower()
                 url_lower = r.get('profile_url', '').lower()
-                
-                # Filter out anonymous profiles
-                if not r.get('name') or r.get('name') in ('LinkedIn Member', 'LinkedIn User'):
+
+                # Filter out obviously anonymous profiles
+                anon_names = ('linkedin member', 'linkedin user', 'private profile', 'private user')
+                if not r.get('name') or r.get('name', '').lower() in anon_names:
                     continue
-                    
-                # Filter by name keywords if query name is provided
-                if query_words:
-                    match = False
-                    for qw in query_words:
-                        if qw in ('sri', 'lanka', 'lankan', 'inc', 'corp', 'limited', 'co'):
-                            continue
-                        if qw in name_lower or qw in url_lower:
-                            match = True
-                            break
-                    if not match:
-                        print(f"Skipping unrelated search result: {r.get('name')} ({r.get('profile_url')})")
+
+                # Filter out search/people pages that accidentally slipped in
+                if '/search/' in url_lower or '/people/' not in url_lower and '/in/' not in url_lower:
+                    if '/in/' not in url_lower:
                         continue
+
+                # Only apply name-keyword filter when first_name OR last_name is non-trivial
+                # If ONLY company is given (first_name and last_name are empty), accept all results
+                meaningful_name_parts = [w for w in query_words]
+                if meaningful_name_parts:
+                    match = any(qw in name_lower or qw in url_lower for qw in meaningful_name_parts)
+                    if not match:
+                        print(f"[Search] Skipping unrelated result: {r.get('name')} ({r.get('profile_url')})")
+                        continue
+
                 filtered_results.append(r)
-                
+
+            print(f"[Search] Found {len(results)} raw result(s), {len(filtered_results)} after filtering.")
             return filtered_results[:max_results]
         except Exception as e:
             err_msg = str(e)
@@ -2254,10 +2307,17 @@ class LinkedInScraper:
 
         if 'qualifications' in p and isinstance(p['qualifications'], list):
             clean_q = []
+            seen_q = set()
             for q in p['qualifications']:
                 if isinstance(q, dict):
                     inst = (q.get('institution') or '').strip()
                     deg = (q.get('degree') or '').strip()
+                    if (inst or deg) and not _is_noise(inst) and not _is_noise(deg):
+                        key = (inst.lower(), deg.lower())
+                        if key not in seen_q:
+                            seen_q.add(key)
+                            clean_q.append(q)
+            p['qualifications'] = clean_q
         if 'volunteer' in p and isinstance(p['volunteer'], list):
             clean_v = []
             seen_v = set()
