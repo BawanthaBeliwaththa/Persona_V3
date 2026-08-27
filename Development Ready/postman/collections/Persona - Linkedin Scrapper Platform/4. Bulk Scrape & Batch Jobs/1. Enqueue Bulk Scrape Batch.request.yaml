@@ -1,0 +1,17 @@
+$kind: http-request
+url: http://localhost:8000/api/persona/bulk-scrape
+method: POST
+headers:
+  Content-Type: application/json
+body:
+  type: text
+  content: |-
+    {
+      "profile_urls": [
+        "https://www.linkedin.com/in/candidate-alpha",
+        "https://www.linkedin.com/in/candidate-beta",
+        "Navod Ranasinghe"
+      ],
+      "return_code": "BATCH-2026-TEST-01"
+    }
+order: 1000
