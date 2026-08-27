@@ -49,7 +49,15 @@ from cleaner import (
     sanitize_profile,
 )
 from core import LinkedInScraper
-from ranker import rank_sri_lankan_profiles, score_profile
+from pdf_generator import (
+    build_profile_pdf,
+    download_profile_pic,
+    generate_bulk_pdf,
+    generate_profile_pdf,
+    generate_text_pdf,
+    make_pdf_safe,
+)
+from ranker import get_score_tier, rank_sri_lankan_profiles, score_profile
 from storage import (
     ALL_PROFILES_CSV,
     ALL_PROFILES_JSON,
@@ -277,6 +285,25 @@ class ScraperCookieLoginRequest(BaseModel):
 
 class ScraperPinRequest(BaseModel):
     pin: str = Field(..., description="Verification PIN code received via email/SMS")
+
+
+class RankRequest(BaseModel):
+    profiles: List[Dict[str, Any]] = Field(..., description="List of scraped profile dicts to score and rank")
+
+
+class TextPdfRequest(BaseModel):
+    text: str = Field(..., description="Raw formatted text content to render into PDF")
+
+
+class AdminApproveRequest(BaseModel):
+    request_id: Optional[str] = Field(None, description="Task ID or Reference Number to re-queue/retry")
+    reference_number: Optional[str] = Field(None, description="Reference number")
+    person_name: Optional[str] = Field(None, description="Candidate name")
+
+
+class AdminScrapeRequestedNameRequest(BaseModel):
+    request_id: str = Field(..., description="Unique request tracking ID")
+    person_name: str = Field(..., description="Candidate name or direct LinkedIn URL to scrape immediately")
 
 
 # ── Root & Health ───────────────────────────────────────────────────────────
@@ -512,6 +539,31 @@ async def scraper_search_contact_info(req: ContactInfoRequest):
 
     contact_info = await run_scraper_coro(scraper.extract_contact_info(req.profile_url), locked=True)
     return {"success": True, "profile_url": req.profile_url, "contact_info": contact_info}
+
+
+@app.post("/api/rank", tags=["Ranking & Analytics"])
+async def rank_candidates(req: RankRequest):
+    """
+    Score and rank scraped profiles with Sri Lankan context detection,
+    seniority scoring, and tier classification (S/A/B/C/D).
+    """
+    if not req.profiles:
+        raise HTTPException(status_code=400, detail="No profiles provided to rank.")
+
+    try:
+        ranked = rank_sri_lankan_profiles(req.profiles)
+        for item in ranked:
+            item["tier"] = get_score_tier(item.get("scoring", {}).get("total_score", 0))
+
+        return {
+            "success": True,
+            "total_input": len(req.profiles),
+            "sri_lankan_count": len(ranked),
+            "non_sri_lankan_filtered": len(req.profiles) - len(ranked),
+            "ranked": ranked,
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Ranking calculation error: {e}")
 
 
 # ============================================================================
@@ -883,6 +935,112 @@ async def download_json(return_code: str = Query(..., description="Job return co
     if not json_path.exists():
         raise HTTPException(status_code=404, detail="JSON file does not exist for this return_code.")
     return FileResponse(json_path, media_type="application/json", filename=f"{return_code}.json")
+
+
+@app.get("/api/client/download/pdf", tags=["Exports & Reports"])
+async def download_pdf(return_code: str = Query(..., description="Job return code or task ID")):
+    """Download individual or bulk job results as a high-quality branded PDF report."""
+    pdf_path = API_SCRAPES_DIR / f"{return_code}.pdf"
+    if pdf_path.exists():
+        return FileResponse(pdf_path, media_type="application/pdf", filename=f"{return_code}.pdf")
+
+    # Generate on-demand if JSON exists
+    json_path = API_SCRAPES_DIR / f"{return_code}.json"
+    if not json_path.exists():
+        raise HTTPException(status_code=404, detail="No profile data found to generate PDF for this return_code.")
+
+    try:
+        with open(json_path, "r", encoding="utf-8") as f:
+            raw_data = json.load(f)
+
+        profiles = []
+        if isinstance(raw_data, dict) and "profiles" in raw_data:
+            profiles = raw_data["profiles"]
+        elif isinstance(raw_data, list):
+            profiles = raw_data
+        elif isinstance(raw_data, dict):
+            profiles = [raw_data]
+
+        if not profiles:
+            raise HTTPException(status_code=400, detail="Empty profile dataset.")
+
+        if len(profiles) == 1:
+            generate_profile_pdf(profiles[0], pdf_path)
+        else:
+            generate_bulk_pdf(profiles, pdf_path)
+
+        return FileResponse(pdf_path, media_type="application/pdf", filename=f"{return_code}.pdf")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"PDF generation error: {e}")
+
+
+@app.post("/api/export-profile-pdf", tags=["Exports & Reports"])
+async def export_profile_pdf(request: Request):
+    """
+    Generate and download a branded PDF report from a single profile JSON payload.
+    Accepts raw profile dict or {"profile": {...}}.
+    """
+    try:
+        data = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Valid JSON body required.")
+
+    prof = data.get("profile") if isinstance(data, dict) and "profile" in data else data
+    if not isinstance(prof, dict) or not prof:
+        raise HTTPException(status_code=400, detail="Profile data dictionary is required.")
+
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"linkedin_profile_{timestamp}.pdf"
+    filepath = EXPORTS_DIR / filename
+
+    try:
+        generate_profile_pdf(prof, filepath)
+        return FileResponse(filepath, media_type="application/pdf", filename=filename)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to generate profile PDF: {e}")
+
+
+@app.post("/api/export-bulk-pdf", tags=["Exports & Reports"])
+async def export_bulk_pdf(request: Request):
+    """
+    Generate and download a multi-profile consolidated PDF report from a list of profiles.
+    Accepts list of dicts or {"profiles": [...]}.
+    """
+    try:
+        data = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Valid JSON body required.")
+
+    profiles = data.get("profiles") if isinstance(data, dict) and "profiles" in data else data
+    if not isinstance(profiles, list) or not profiles:
+        raise HTTPException(status_code=400, detail="List of profile dictionaries is required.")
+
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"linkedin_bulk_profiles_{timestamp}.pdf"
+    filepath = EXPORTS_DIR / filename
+
+    try:
+        generate_bulk_pdf(profiles, filepath)
+        return FileResponse(filepath, media_type="application/pdf", filename=filename)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to generate bulk PDF: {e}")
+
+
+@app.post("/api/export-text-pdf", tags=["Exports & Reports"])
+async def export_text_pdf(req: TextPdfRequest):
+    """Export formatted raw text as a downloadable PDF document."""
+    if not req.text or not req.text.strip():
+        raise HTTPException(status_code=400, detail="No text content provided.")
+
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"linkedin_full_profile_{timestamp}.pdf"
+    filepath = EXPORTS_DIR / filename
+
+    try:
+        generate_text_pdf(req.text, filepath)
+        return FileResponse(filepath, media_type="application/pdf", filename=filename)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to generate text PDF: {e}")
 
 
 # ============================================================================
@@ -1394,6 +1552,159 @@ async def admin_destroy_db():
     """Wipe and reset master database and search cache."""
     clear_master_db()
     return {"success": True, "message": "Master database and cache destroyed successfully."}
+
+
+# ============================================================================
+# 7. ADMIN APPROVALS & MANUAL SCRAPE ENDPOINTS
+# ============================================================================
+
+@app.get("/api/admin/approvals", tags=["Admin Approvals"])
+async def admin_list_approvals():
+    """
+    List all pending, in-progress, completed, and failed scrape requests
+    across both the task bucket and jobs registry.
+    """
+    jobs = get_jobs_data()
+    tasks = load_bucket_queue()
+
+    requests_list = []
+    seen_ids = set()
+
+    for task in tasks:
+        task_id = task.get("id")
+        if not task_id:
+            continue
+        seen_ids.add(task_id)
+
+        st = task.get("status", "unknown")
+        requests_list.append({
+            "request_id": task_id,
+            "reference_number": task_id,
+            "person_name": task.get("_client_name") or task.get("query", ""),
+            "profile_url": task.get("result_url", ""),
+            "status": st,
+            "requested_at": task.get("added_at", ""),
+            "scraped_at": task.get("completed_at", ""),
+            "error": task.get("error", ""),
+        })
+
+    for job_id, job in jobs.items():
+        if job_id in seen_ids:
+            continue
+        requests_list.append({
+            "request_id": job_id,
+            "reference_number": job_id,
+            "person_name": job.get("person_name", job.get("profile_url", "")),
+            "profile_url": job.get("profile_url", ""),
+            "status": job.get("status", "unknown"),
+            "requested_at": job.get("requested_at", ""),
+            "scraped_at": job.get("scraped_at", ""),
+            "error": job.get("error", ""),
+        })
+
+    requests_list.sort(key=lambda x: x.get("requested_at", "") or "", reverse=True)
+    return {"success": True, "approvals": requests_list, "total": len(requests_list)}
+
+
+@app.post("/api/admin/approve", tags=["Admin Approvals"])
+async def admin_approve(req: AdminApproveRequest = AdminApproveRequest()):
+    """
+    Retry or re-queue a failed or stalled scrape request.
+    Re-enqueues the item as 'pending' into the task bucket.
+    """
+    target_id = req.request_id or req.reference_number
+    target_name = req.person_name
+
+    tasks = load_bucket_queue()
+    found = False
+
+    if target_id:
+        for t in tasks:
+            if t.get("id") == target_id:
+                t["status"] = "pending"
+                t["error"] = None
+                t["started_at"] = None
+                t["completed_at"] = None
+                found = True
+                break
+
+    if not found and target_name:
+        for t in tasks:
+            if (t.get("query") or "").lower() == target_name.lower():
+                t["status"] = "pending"
+                t["error"] = None
+                found = True
+                break
+
+    if found:
+        save_bucket_queue(tasks)
+        ensure_worker_running()
+        return {"success": True, "message": f"Task '{target_id or target_name}' re-queued for scraping."}
+
+    # If not found in bucket, add as a new bucket task
+    new_task_id = target_id or str(uuid.uuid4())
+    q_str = target_name or target_id or "Manual Request"
+    new_task = {
+        "id": new_task_id,
+        "query": q_str,
+        "type": "url" if q_str.startswith("http") else "name",
+        "status": "pending",
+        "added_at": datetime.now().isoformat(),
+        "started_at": None,
+        "completed_at": None,
+        "result_name": "",
+        "result_url": q_str if q_str.startswith("http") else "",
+        "error": None,
+    }
+    tasks.append(new_task)
+    save_bucket_queue(tasks)
+    ensure_worker_running()
+
+    return {"success": True, "message": f"New task '{new_task_id}' queued for scraping.", "reference_number": new_task_id}
+
+
+@app.post("/api/admin/scrape-requested-name", tags=["Admin Approvals"])
+async def admin_scrape_requested_name(req: AdminScrapeRequestedNameRequest):
+    """
+    Immediately scrape a requested candidate name or URL using the active scraper session.
+    Saves results to master database and artifact files.
+    """
+    scraper = get_scraper_instance()
+    if not scraper or not scraper.is_authenticated:
+        raise HTTPException(status_code=400, detail="Scraper is not initialized or authenticated. Please login first.")
+
+    person_name = req.person_name.strip()
+    request_id = req.request_id.strip()
+
+    if not person_name or not request_id:
+        raise HTTPException(status_code=400, detail="person_name and request_id are required.")
+
+    if person_name.startswith("http"):
+        profile_url = person_name
+    else:
+        results = await run_scraper_coro(scraper.search_people(person_name, "", max_results=1), locked=True)
+        if not results:
+            raise HTTPException(status_code=404, detail=f"No profile found on LinkedIn for: {person_name}")
+        profile_url = results[0]["profile_url"]
+
+    profile = await run_scraper_coro(scraper.extract_profile(profile_url), locked=True)
+    if "error" in profile and not profile.get("name"):
+        raise HTTPException(status_code=500, detail=profile.get("error", "Profile extraction failed."))
+
+    scraped_at = datetime.now().isoformat()
+    profile["scraped_at"] = scraped_at
+
+    from storage import save_scraped_data_formats
+    save_scraped_data_formats(profile, request_id)
+    save_to_master_db(profile)
+    update_job_status(request_id, "completed", scraped_at=scraped_at)
+
+    return {
+        "success": True,
+        "request_id": request_id,
+        "profile_url": profile_url,
+        "profile": profile,
+    }
 
 
 # ── Standalone Uvicorn Runner ───────────────────────────────────────────────
