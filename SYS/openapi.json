@@ -1,0 +1,1722 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Persona V3 \u2014 LinkedIn Intelligence API",
+    "description": "Dedicated ASGI backend service for Zoho CRM / Zoho Flow integration.",
+    "version": "3.0.0"
+  },
+  "paths": {
+    "/": {
+      "get": {
+        "tags": [
+          "System"
+        ],
+        "summary": "Root",
+        "operationId": "root__get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/health": {
+      "get": {
+        "tags": [
+          "System"
+        ],
+        "summary": "Health Check",
+        "operationId": "health_check_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/client/scrape": {
+      "post": {
+        "tags": [
+          "Search"
+        ],
+        "summary": "Client Scrape",
+        "description": "Primary Zoho integration endpoint.\nAccepts candidate name or profile URL.\n1. Checks cache for instant return.\n2. If new, enqueues to Task Bucket queue and returns reference_number.",
+        "operationId": "client_scrape_api_client_scrape_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScrapeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/scraper/search": {
+      "post": {
+        "tags": [
+          "Search"
+        ],
+        "summary": "Scraper Search",
+        "description": "Direct search for people profiles on LinkedIn.",
+        "operationId": "scraper_search_api_scraper_search_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SearchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/scraper/search-and-extract": {
+      "post": {
+        "tags": [
+          "Search"
+        ],
+        "summary": "Scraper Search And Extract",
+        "description": "Direct search and immediate profile extraction for top matches.",
+        "operationId": "scraper_search_and_extract_api_scraper_search_and_extract_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SearchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/scraper/search-contact-info": {
+      "post": {
+        "tags": [
+          "Search"
+        ],
+        "summary": "Scraper Search Contact Info",
+        "description": "Direct extraction of contact information for a profile URL.",
+        "operationId": "scraper_search_contact_info_api_scraper_search_contact_info_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ContactInfoRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/client/scrape-status": {
+      "get": {
+        "tags": [
+          "Track"
+        ],
+        "summary": "Client Scrape Status",
+        "description": "Poll the bucket queue for a task by task_id or name (100% Case-Insensitive).\nReturns real-time queue position or completed profile data.",
+        "operationId": "client_scrape_status_api_client_scrape_status_get",
+        "parameters": [
+          {
+            "name": "task_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Task ID or Reference Number",
+              "title": "Task Id"
+            },
+            "description": "Task ID or Reference Number"
+          },
+          {
+            "name": "name",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Candidate name",
+              "title": "Name"
+            },
+            "description": "Candidate name"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/client/lookup-by-reference": {
+      "post": {
+        "tags": [
+          "Track"
+        ],
+        "summary": "Client Lookup By Reference",
+        "description": "Lookup scraped profile by reference number (supports both GET and POST).",
+        "operationId": "client_lookup_by_reference_api_client_lookup_by_reference_post",
+        "parameters": [
+          {
+            "name": "reference_number",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Reference Number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "Track"
+        ],
+        "summary": "Client Lookup By Reference",
+        "description": "Lookup scraped profile by reference number (supports both GET and POST).",
+        "operationId": "client_lookup_by_reference_api_client_lookup_by_reference_post",
+        "parameters": [
+          {
+            "name": "reference_number",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Reference Number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/client/retrieve": {
+      "post": {
+        "tags": [
+          "Track"
+        ],
+        "summary": "Client Retrieve",
+        "description": "Retrieve single job result by return_code.",
+        "operationId": "client_retrieve_api_client_retrieve_post",
+        "parameters": [
+          {
+            "name": "return_code",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Return Code"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "Track"
+        ],
+        "summary": "Client Retrieve",
+        "description": "Retrieve single job result by return_code.",
+        "operationId": "client_retrieve_api_client_retrieve_post",
+        "parameters": [
+          {
+            "name": "return_code",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Return Code"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/scraper/stats": {
+      "get": {
+        "tags": [
+          "Track"
+        ],
+        "summary": "Scraper Stats",
+        "description": "Retrieve scraper browser and queue stats.",
+        "operationId": "scraper_stats_api_scraper_stats_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/bulk/scrape": {
+      "post": {
+        "tags": [
+          "Bulk Search"
+        ],
+        "summary": "Bulk Scrape",
+        "description": "Queue multiple LinkedIn URLs or candidate names for bulk extraction.\nLinks all items to the provided return_code.",
+        "operationId": "bulk_scrape_api_bulk_scrape_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BulkScrapeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/persona/bulk-scrape": {
+      "post": {
+        "tags": [
+          "Bulk Search"
+        ],
+        "summary": "Bulk Scrape",
+        "description": "Queue multiple LinkedIn URLs or candidate names for bulk extraction.\nLinks all items to the provided return_code.",
+        "operationId": "bulk_scrape_api_persona_bulk_scrape_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BulkScrapeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/bulk/retrieve": {
+      "post": {
+        "tags": [
+          "Bulk Search"
+        ],
+        "summary": "Bulk Retrieve",
+        "description": "Retrieve consolidated results of a bulk scrape job.",
+        "operationId": "bulk_retrieve_api_bulk_retrieve_post",
+        "parameters": [
+          {
+            "name": "return_code",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Return Code"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "Bulk Search"
+        ],
+        "summary": "Bulk Retrieve",
+        "description": "Retrieve consolidated results of a bulk scrape job.",
+        "operationId": "bulk_retrieve_api_bulk_retrieve_post",
+        "parameters": [
+          {
+            "name": "return_code",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Return Code"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/persona/bulk-retrieve": {
+      "post": {
+        "tags": [
+          "Bulk Search"
+        ],
+        "summary": "Bulk Retrieve",
+        "description": "Retrieve consolidated results of a bulk scrape job.",
+        "operationId": "bulk_retrieve_api_persona_bulk_retrieve_post",
+        "parameters": [
+          {
+            "name": "return_code",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Return Code"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "Bulk Search"
+        ],
+        "summary": "Bulk Retrieve",
+        "description": "Retrieve consolidated results of a bulk scrape job.",
+        "operationId": "bulk_retrieve_api_persona_bulk_retrieve_post",
+        "parameters": [
+          {
+            "name": "return_code",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Return Code"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/client/download/csv": {
+      "get": {
+        "tags": [
+          "Bulk Search"
+        ],
+        "summary": "Download Csv",
+        "description": "Download individual or bulk job results as a CSV file.",
+        "operationId": "download_csv_api_client_download_csv_get",
+        "parameters": [
+          {
+            "name": "return_code",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Job return code",
+              "title": "Return Code"
+            },
+            "description": "Job return code"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/client/download/json": {
+      "get": {
+        "tags": [
+          "Bulk Search"
+        ],
+        "summary": "Download Json",
+        "description": "Download individual or bulk job results as a JSON file.",
+        "operationId": "download_json_api_client_download_json_get",
+        "parameters": [
+          {
+            "name": "return_code",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Job return code",
+              "title": "Return Code"
+            },
+            "description": "Job return code"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/bucket/add": {
+      "post": {
+        "tags": [
+          "Basket / Bucket"
+        ],
+        "summary": "Bucket Add",
+        "description": "Add one or more queries/URLs to the task bucket queue.",
+        "operationId": "bucket_add_api_bucket_add_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BucketAddRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/bucket/add-search": {
+      "post": {
+        "tags": [
+          "Basket / Bucket"
+        ],
+        "summary": "Bucket Add Search",
+        "description": "Add a structured person search task to the bucket.",
+        "operationId": "bucket_add_search_api_bucket_add_search_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BucketAddSearchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/bucket/upload": {
+      "post": {
+        "tags": [
+          "Basket / Bucket"
+        ],
+        "summary": "Bucket Upload",
+        "description": "Upload a CSV or JSON file of leads/names/URLs into the task bucket.",
+        "operationId": "bucket_upload_api_bucket_upload_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_bucket_upload_api_bucket_upload_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/bucket/status": {
+      "get": {
+        "tags": [
+          "Basket / Bucket"
+        ],
+        "summary": "Bucket Status",
+        "description": "Get full bucket queue status and task counts.",
+        "operationId": "bucket_status_api_bucket_status_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/bucket/pause": {
+      "post": {
+        "tags": [
+          "Basket / Bucket"
+        ],
+        "summary": "Bucket Pause",
+        "description": "Pause bucket worker.",
+        "operationId": "bucket_pause_api_bucket_pause_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/bucket/resume": {
+      "post": {
+        "tags": [
+          "Basket / Bucket"
+        ],
+        "summary": "Bucket Resume",
+        "description": "Resume bucket worker.",
+        "operationId": "bucket_resume_api_bucket_resume_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/bucket/clear": {
+      "post": {
+        "tags": [
+          "Basket / Bucket"
+        ],
+        "summary": "Bucket Clear",
+        "description": "Clear completed and failed tasks (or all if all=True).",
+        "operationId": "bucket_clear_api_bucket_clear_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BucketClearRequest",
+                "default": {
+                  "all": false
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/bucket/remove": {
+      "post": {
+        "tags": [
+          "Basket / Bucket"
+        ],
+        "summary": "Bucket Remove",
+        "description": "Remove a pending task from the bucket queue.",
+        "operationId": "bucket_remove_api_bucket_remove_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BucketRemoveRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/bucket/config": {
+      "post": {
+        "tags": [
+          "Basket / Bucket"
+        ],
+        "summary": "Bucket Config",
+        "description": "Update bucket rest interval configuration.",
+        "operationId": "bucket_config_api_bucket_config_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BucketConfigRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/scraper/init": {
+      "post": {
+        "tags": [
+          "Scraper Session"
+        ],
+        "summary": "Scraper Init",
+        "description": "Initialize or reset Playwright Chromium browser.",
+        "operationId": "scraper_init_api_scraper_init_post",
+        "parameters": [
+          {
+            "name": "headless",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Headless"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/scraper/login": {
+      "post": {
+        "tags": [
+          "Scraper Session"
+        ],
+        "summary": "Scraper Login",
+        "description": "Authenticate LinkedIn session via email and password.",
+        "operationId": "scraper_login_api_scraper_login_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScraperLoginRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/scraper/login-cookie": {
+      "post": {
+        "tags": [
+          "Scraper Session"
+        ],
+        "summary": "Scraper Login Cookie",
+        "description": "Authenticate LinkedIn session via li_at session cookie.",
+        "operationId": "scraper_login_cookie_api_scraper_login_cookie_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScraperCookieLoginRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/scraper/submit-pin": {
+      "post": {
+        "tags": [
+          "Scraper Session"
+        ],
+        "summary": "Scraper Submit Pin",
+        "description": "Submit 2FA PIN code during login checkpoint.",
+        "operationId": "scraper_submit_pin_api_scraper_submit_pin_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScraperPinRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/scraper/kill-browser": {
+      "post": {
+        "tags": [
+          "Scraper Session"
+        ],
+        "summary": "Scraper Kill Browser",
+        "description": "Force terminate and kill any orphan browser processes.",
+        "operationId": "scraper_kill_browser_api_scraper_kill_browser_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Body_bucket_upload_api_bucket_upload_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "File"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "Body_bucket_upload_api_bucket_upload_post"
+      },
+      "BucketAddRequest": {
+        "properties": {
+          "query": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Query",
+            "description": "Single query or profile URL"
+          },
+          "queries": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Queries",
+            "description": "List of queries or profile URLs"
+          },
+          "type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Type",
+            "description": "'name' or 'url'",
+            "default": "name"
+          }
+        },
+        "type": "object",
+        "title": "BucketAddRequest"
+      },
+      "BucketAddSearchRequest": {
+        "properties": {
+          "first_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Name",
+            "description": "First name",
+            "default": ""
+          },
+          "last_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Name",
+            "description": "Last name",
+            "default": ""
+          },
+          "company": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Company",
+            "description": "Target company",
+            "default": ""
+          },
+          "max_results": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Results",
+            "description": "Maximum results to scrape",
+            "default": 5
+          }
+        },
+        "type": "object",
+        "title": "BucketAddSearchRequest"
+      },
+      "BucketClearRequest": {
+        "properties": {
+          "all": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "All",
+            "description": "Clear all tasks if True, otherwise only completed and failed",
+            "default": false
+          }
+        },
+        "type": "object",
+        "title": "BucketClearRequest"
+      },
+      "BucketConfigRequest": {
+        "properties": {
+          "rest_seconds": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Rest Seconds",
+            "description": "Rest period in seconds between tasks",
+            "default": 30
+          }
+        },
+        "type": "object",
+        "title": "BucketConfigRequest"
+      },
+      "BucketRemoveRequest": {
+        "properties": {
+          "task_id": {
+            "type": "string",
+            "title": "Task Id",
+            "description": "ID of pending task to remove"
+          }
+        },
+        "type": "object",
+        "required": [
+          "task_id"
+        ],
+        "title": "BucketRemoveRequest"
+      },
+      "BulkScrapeRequest": {
+        "properties": {
+          "profile_urls": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Profile Urls",
+            "description": "List of profile URLs or names to scrape"
+          },
+          "return_code": {
+            "type": "string",
+            "title": "Return Code",
+            "description": "Unique tracking reference for this bulk job"
+          }
+        },
+        "type": "object",
+        "required": [
+          "profile_urls",
+          "return_code"
+        ],
+        "title": "BulkScrapeRequest"
+      },
+      "ContactInfoRequest": {
+        "properties": {
+          "profile_url": {
+            "type": "string",
+            "title": "Profile Url",
+            "description": "LinkedIn profile URL to fetch contact info for"
+          }
+        },
+        "type": "object",
+        "required": [
+          "profile_url"
+        ],
+        "title": "ContactInfoRequest"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "ScrapeRequest": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name",
+            "description": "Candidate or person name to search and scrape"
+          },
+          "profile_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Profile Url",
+            "description": "Direct LinkedIn profile URL"
+          }
+        },
+        "type": "object",
+        "title": "ScrapeRequest"
+      },
+      "ScraperCookieLoginRequest": {
+        "properties": {
+          "cookie_value": {
+            "type": "string",
+            "title": "Cookie Value",
+            "description": "Value of li_at cookie"
+          }
+        },
+        "type": "object",
+        "required": [
+          "cookie_value"
+        ],
+        "title": "ScraperCookieLoginRequest"
+      },
+      "ScraperLoginRequest": {
+        "properties": {
+          "email": {
+            "type": "string",
+            "title": "Email",
+            "description": "LinkedIn email"
+          },
+          "password": {
+            "type": "string",
+            "title": "Password",
+            "description": "LinkedIn password"
+          }
+        },
+        "type": "object",
+        "required": [
+          "email",
+          "password"
+        ],
+        "title": "ScraperLoginRequest"
+      },
+      "ScraperPinRequest": {
+        "properties": {
+          "pin": {
+            "type": "string",
+            "title": "Pin",
+            "description": "Verification PIN code received via email/SMS"
+          }
+        },
+        "type": "object",
+        "required": [
+          "pin"
+        ],
+        "title": "ScraperPinRequest"
+      },
+      "SearchRequest": {
+        "properties": {
+          "first_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Name",
+            "description": "First name",
+            "default": ""
+          },
+          "last_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Name",
+            "description": "Last name",
+            "default": ""
+          },
+          "company": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Company",
+            "description": "Target company",
+            "default": ""
+          },
+          "max_results": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Results",
+            "description": "Maximum number of search results to return",
+            "default": 5
+          }
+        },
+        "type": "object",
+        "title": "SearchRequest"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      }
+    }
+  }
+}
