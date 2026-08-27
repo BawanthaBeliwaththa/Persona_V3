@@ -1,0 +1,6 @@
+$kind: http-request
+url: http://localhost:8000/api/client/scrape-status?name=Bawantha Beliwaththa
+method: GET
+queryParams:
+  name: Bawantha Beliwaththa
+order: 1000

@@ -1,0 +1,6 @@
+$kind: http-request
+url: http://localhost:8000/api/client/scrape-status?task_id=PASTE_REFERENCE_ID_HERE
+method: GET
+queryParams:
+  task_id: PASTE_REFERENCE_ID_HERE
+order: 2000

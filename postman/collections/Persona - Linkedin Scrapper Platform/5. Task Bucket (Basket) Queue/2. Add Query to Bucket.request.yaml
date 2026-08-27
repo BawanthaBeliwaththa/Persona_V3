@@ -1,0 +1,13 @@
+$kind: http-request
+url: http://localhost:8000/api/bucket/add
+method: POST
+headers:
+  Content-Type: application/json
+body:
+  type: text
+  content: |-
+    {
+      "query": "Navod Ranasinghe",
+      "type": "name"
+    }
+order: 2000

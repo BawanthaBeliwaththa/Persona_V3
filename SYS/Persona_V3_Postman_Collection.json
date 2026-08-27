@@ -1,0 +1,415 @@
+{
+	"info": {
+		"name": "Persona - Linkedin Scrapper Platform",
+		"description": "Complete Postman collection for Persona V3 FastAPI backend.",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "1. Health & System",
+			"item": [
+				{
+					"name": "1. Health Check",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:8000/",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8000",
+							"path": [
+								""
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "2. Scraper Session Stats",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:8000/api/scraper/stats",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8000",
+							"path": [
+								"api",
+								"scraper",
+								"stats"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "2. Search & Single Scrape",
+			"item": [
+				{
+					"name": "1. Enqueue Single Candidate Scrape (Zoho)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Bawantha Beliwaththa\",\n  \"profile_url\": \"https://www.linkedin.com/in/bawantha-beliwaththa\"\n}"
+						},
+						"url": {
+							"raw": "http://localhost:8000/api/client/scrape",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8000",
+							"path": [
+								"api",
+								"client",
+								"scrape"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "2. Search People Direct",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"first_name\": \"Hansika\",\n  \"last_name\": \"Kavindi\",\n  \"company\": \"Virtusa\",\n  \"max_results\": 5\n}"
+						},
+						"url": {
+							"raw": "http://localhost:8000/api/scraper/search",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8000",
+							"path": [
+								"api",
+								"scraper",
+								"search"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "3. Track & Polling Retrieval",
+			"item": [
+				{
+					"name": "1. Poll Status by Candidate Name",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:8000/api/client/scrape-status?name=Bawantha Beliwaththa",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8000",
+							"path": [
+								"api",
+								"client",
+								"scrape-status"
+							],
+							"query": [
+								{
+									"key": "name",
+									"value": "Bawantha Beliwaththa"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "2. Poll Status by Task Reference ID",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:8000/api/client/scrape-status?task_id=PASTE_REFERENCE_ID_HERE",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8000",
+							"path": [
+								"api",
+								"client",
+								"scrape-status"
+							],
+							"query": [
+								{
+									"key": "task_id",
+									"value": "PASTE_REFERENCE_ID_HERE"
+								}
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "4. Bulk Scrape & Batch Jobs",
+			"item": [
+				{
+					"name": "1. Enqueue Bulk Scrape Batch",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"profile_urls\": [\n    \"https://www.linkedin.com/in/candidate-alpha\",\n    \"https://www.linkedin.com/in/candidate-beta\",\n    \"Navod Ranasinghe\"\n  ],\n  \"return_code\": \"BATCH-2026-TEST-01\"\n}"
+						},
+						"url": {
+							"raw": "http://localhost:8000/api/persona/bulk-scrape",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8000",
+							"path": [
+								"api",
+								"persona",
+								"bulk-scrape"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "2. Retrieve Bulk Scrape Batch Results",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:8000/api/persona/bulk-retrieve?return_code=BATCH-2026-TEST-01",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8000",
+							"path": [
+								"api",
+								"persona",
+								"bulk-retrieve"
+							],
+							"query": [
+								{
+									"key": "return_code",
+									"value": "BATCH-2026-TEST-01"
+								}
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "5. Task Bucket (Basket) Queue",
+			"item": [
+				{
+					"name": "1. Get Bucket Queue Status",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:8000/api/bucket/status",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8000",
+							"path": [
+								"api",
+								"bucket",
+								"status"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "2. Add Query to Bucket",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"query\": \"Navod Ranasinghe\",\n  \"type\": \"name\"\n}"
+						},
+						"url": {
+							"raw": "http://localhost:8000/api/bucket/add",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8000",
+							"path": [
+								"api",
+								"bucket",
+								"add"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "3. Pause Worker",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:8000/api/bucket/pause",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8000",
+							"path": [
+								"api",
+								"bucket",
+								"pause"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "4. Resume Worker",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:8000/api/bucket/resume",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8000",
+							"path": [
+								"api",
+								"bucket",
+								"resume"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "5. Clear Tasks",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:8000/api/bucket/clear",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8000",
+							"path": [
+								"api",
+								"bucket",
+								"clear"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "6. Scraper Session & Auth",
+			"item": [
+				{
+					"name": "1. Login with Cookie (li_at)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"li_at\": \"YOUR_LI_AT_COOKIE_HERE\"\n}"
+						},
+						"url": {
+							"raw": "http://localhost:8000/api/scraper/login-cookie",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8000",
+							"path": [
+								"api",
+								"scraper",
+								"login-cookie"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "2. Kill Orphaned Browser",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:8000/api/scraper/kill-browser",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8000",
+							"path": [
+								"api",
+								"scraper",
+								"kill-browser"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		}
+	]
+}
