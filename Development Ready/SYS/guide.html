@@ -1,0 +1,1415 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Persona - LinkedIn Scraper Platform | Enterprise Technical Manual & Guide</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-primary: #0a0d14;
+      --bg-secondary: #101522;
+      --bg-tertiary: #171e2e;
+      --bg-card: rgba(23, 30, 46, 0.7);
+      --bg-glass: rgba(16, 21, 34, 0.88);
+      --border-color: rgba(255, 255, 255, 0.08);
+      --border-focus: #3b82f6;
+      --text-primary: #f1f5f9;
+      --text-secondary: #94a3b8;
+      --text-muted: #64748b;
+      --accent-blue: #3b82f6;
+      --accent-cyan: #06b6d4;
+      --accent-emerald: #10b981;
+      --accent-amber: #f59e0b;
+      --accent-rose: #f43f5e;
+      --accent-purple: #8b5cf6;
+      --code-bg: #0d111a;
+      --sidebar-width: 290px;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background-color: var(--bg-primary);
+      color: var(--text-primary);
+      line-height: 1.6;
+      overflow-x: hidden;
+    }
+
+    /* Layout */
+    .app-container {
+      display: flex;
+      min-height: 100vh;
+    }
+
+    /* Sidebar Navigation */
+    .sidebar {
+      width: var(--sidebar-width);
+      background: var(--bg-glass);
+      backdrop-filter: blur(16px);
+      border-right: 1px solid var(--border-color);
+      position: fixed;
+      top: 0;
+      bottom: 0;
+      left: 0;
+      overflow-y: auto;
+      z-index: 100;
+      padding: 24px 16px;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding-bottom: 20px;
+      margin-bottom: 16px;
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    .brand-logo {
+      width: 42px;
+      height: 42px;
+      border-radius: 10px;
+      background: linear-gradient(135deg, var(--accent-blue), var(--accent-cyan));
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 800;
+      font-family: 'Outfit', sans-serif;
+      font-size: 20px;
+      color: #fff;
+      box-shadow: 0 4px 16px rgba(59, 130, 246, 0.4);
+    }
+
+    .brand-text h1 {
+      font-size: 16.5px;
+      font-family: 'Outfit', sans-serif;
+      font-weight: 700;
+      color: #fff;
+      letter-spacing: -0.3px;
+    }
+
+    .brand-text span {
+      font-size: 11px;
+      color: var(--accent-cyan);
+      text-transform: uppercase;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+    }
+
+    .nav-section-title {
+      font-size: 10.5px;
+      text-transform: uppercase;
+      font-weight: 700;
+      color: var(--text-muted);
+      letter-spacing: 0.8px;
+      margin: 16px 10px 6px;
+    }
+
+    .nav-link {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 12px;
+      color: var(--text-secondary);
+      text-decoration: none;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 500;
+      transition: all 0.2s ease;
+      margin-bottom: 2px;
+    }
+
+    .nav-link:hover {
+      background: rgba(255, 255, 255, 0.05);
+      color: var(--text-primary);
+      transform: translateX(3px);
+    }
+
+    .nav-link.active {
+      background: linear-gradient(90deg, rgba(59, 130, 246, 0.15), rgba(6, 182, 212, 0.05));
+      color: var(--accent-cyan);
+      border-left: 3px solid var(--accent-cyan);
+      font-weight: 600;
+    }
+
+    /* Main Content */
+    .main-content {
+      margin-left: var(--sidebar-width);
+      flex: 1;
+      padding: 40px 48px 100px;
+      max-width: 1200px;
+    }
+
+    /* Hero Banner */
+    .hero-banner {
+      background: linear-gradient(135deg, rgba(30, 58, 138, 0.4), rgba(15, 23, 42, 0.8)), radial-gradient(circle at top right, rgba(6, 182, 212, 0.2), transparent 60%);
+      border: 1px solid rgba(59, 130, 246, 0.3);
+      border-radius: 20px;
+      padding: 40px 36px;
+      margin-bottom: 40px;
+      box-shadow: 0 20px 40px -15px rgba(0, 0, 0, 0.5);
+    }
+
+    .hero-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(59, 130, 246, 0.2);
+      border: 1px solid rgba(59, 130, 246, 0.4);
+      padding: 4px 12px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--accent-cyan);
+      margin-bottom: 16px;
+    }
+
+    .hero-title {
+      font-family: 'Outfit', sans-serif;
+      font-size: 34px;
+      font-weight: 800;
+      letter-spacing: -0.5px;
+      margin-bottom: 12px;
+      background: linear-gradient(120deg, #ffffff, #93c5fd);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .hero-desc {
+      font-size: 15.5px;
+      color: var(--text-secondary);
+      max-width: 820px;
+      line-height: 1.7;
+      margin-bottom: 24px;
+    }
+
+    .hero-stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 16px;
+    }
+
+    .stat-card {
+      background: rgba(16, 21, 34, 0.6);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      padding: 16px 20px;
+    }
+
+    .stat-val {
+      font-family: 'Outfit', sans-serif;
+      font-size: 24px;
+      font-weight: 700;
+      color: var(--accent-cyan);
+      margin-bottom: 4px;
+    }
+
+    .stat-lbl {
+      font-size: 12px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      font-weight: 600;
+    }
+
+    /* Content Section */
+    .section-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 16px;
+      padding: 32px;
+      margin-bottom: 36px;
+      backdrop-filter: blur(10px);
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+    }
+
+    .section-title {
+      font-family: 'Outfit', sans-serif;
+      font-size: 23px;
+      font-weight: 700;
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      color: #fff;
+    }
+
+    .section-title span.badge {
+      font-size: 12px;
+      font-family: 'Inter', sans-serif;
+      padding: 3px 10px;
+      border-radius: 20px;
+      background: rgba(59, 130, 246, 0.15);
+      border: 1px solid rgba(59, 130, 246, 0.3);
+      color: var(--accent-cyan);
+      font-weight: 600;
+    }
+
+    p {
+      color: var(--text-secondary);
+      margin-bottom: 16px;
+      font-size: 14.5px;
+    }
+
+    /* Interactive Diagrams & Workflows */
+    .diagram-container {
+      background: var(--code-bg);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      padding: 24px;
+      margin: 20px 0;
+    }
+
+    .diagram-flow {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .flow-step {
+      display: flex;
+      align-items: flex-start;
+      gap: 16px;
+      padding: 14px 18px;
+      background: var(--bg-tertiary);
+      border-radius: 10px;
+      border: 1px solid var(--border-color);
+    }
+
+    .flow-step-num {
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      background: linear-gradient(135deg, var(--accent-blue), var(--accent-cyan));
+      color: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 14px;
+      flex-shrink: 0;
+    }
+
+    .flow-step-body h4 {
+      font-size: 15px;
+      font-weight: 600;
+      color: #fff;
+      margin-bottom: 4px;
+    }
+
+    .flow-step-body p {
+      font-size: 13.5px;
+      color: var(--text-secondary);
+      margin-bottom: 0;
+    }
+
+    /* Code Blocks */
+    .code-wrapper {
+      background: var(--code-bg);
+      border: 1px solid var(--border-color);
+      border-radius: 10px;
+      margin: 16px 0;
+      overflow: hidden;
+    }
+
+    .code-header {
+      background: rgba(255, 255, 255, 0.03);
+      border-bottom: 1px solid var(--border-color);
+      padding: 10px 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .code-lang {
+      font-family: 'Fira Code', monospace;
+      font-size: 12px;
+      color: var(--accent-cyan);
+      font-weight: 500;
+    }
+
+    .copy-btn {
+      background: rgba(255, 255, 255, 0.08);
+      border: none;
+      color: var(--text-secondary);
+      padding: 4px 10px;
+      border-radius: 6px;
+      font-size: 12px;
+      cursor: pointer;
+      font-weight: 500;
+      transition: all 0.2s;
+    }
+
+    .copy-btn:hover {
+      background: var(--accent-blue);
+      color: #fff;
+    }
+
+    pre {
+      padding: 16px;
+      overflow-x: auto;
+      font-family: 'Fira Code', monospace;
+      font-size: 13px;
+      color: #cbd5e1;
+      line-height: 1.5;
+    }
+
+    /* Endpoint Cards */
+    .endpoint-card {
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      margin-bottom: 16px;
+      overflow: hidden;
+    }
+
+    .endpoint-header {
+      padding: 14px 18px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      background: rgba(255, 255, 255, 0.02);
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    .method-badge {
+      font-family: 'Fira Code', monospace;
+      font-weight: 700;
+      font-size: 11.5px;
+      padding: 4px 9px;
+      border-radius: 6px;
+    }
+
+    .method-post { background: rgba(16, 185, 129, 0.2); color: var(--accent-emerald); border: 1px solid rgba(16, 185, 129, 0.4); }
+    .method-get { background: rgba(59, 130, 246, 0.2); color: var(--accent-blue); border: 1px solid rgba(59, 130, 246, 0.4); }
+
+    .endpoint-path {
+      font-family: 'Fira Code', monospace;
+      font-size: 13.5px;
+      font-weight: 600;
+      color: #fff;
+    }
+
+    .endpoint-desc {
+      font-size: 12.5px;
+      color: var(--text-muted);
+      margin-left: auto;
+    }
+
+    .endpoint-body {
+      padding: 16px 18px;
+    }
+
+    /* Tabs Component */
+    .tabs-nav {
+      display: flex;
+      gap: 8px;
+      border-bottom: 1px solid var(--border-color);
+      margin-bottom: 16px;
+      padding-bottom: 8px;
+    }
+
+    .tab-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-secondary);
+      padding: 8px 16px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .tab-btn.active {
+      background: rgba(59, 130, 246, 0.15);
+      color: var(--accent-cyan);
+      border: 1px solid rgba(59, 130, 246, 0.3);
+    }
+
+    .tab-content {
+      display: none;
+    }
+
+    .tab-content.active {
+      display: block;
+    }
+
+    /* Live API Tester */
+    .tester-box {
+      background: var(--code-bg);
+      border: 1px solid rgba(59, 130, 246, 0.3);
+      border-radius: 12px;
+      padding: 20px;
+      margin-top: 16px;
+    }
+
+    .tester-row {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+
+    .tester-input {
+      flex: 1;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 10px 14px;
+      color: #fff;
+      font-family: 'Fira Code', monospace;
+      font-size: 13px;
+      outline: none;
+    }
+
+    .tester-input:focus {
+      border-color: var(--accent-blue);
+    }
+
+    .btn-test {
+      background: linear-gradient(135deg, var(--accent-blue), var(--accent-cyan));
+      border: none;
+      color: #fff;
+      padding: 10px 20px;
+      border-radius: 8px;
+      font-weight: 600;
+      font-size: 13px;
+      cursor: pointer;
+      transition: opacity 0.2s;
+    }
+
+    .btn-test:hover {
+      opacity: 0.9;
+    }
+
+    .tester-output {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 12px;
+      font-family: 'Fira Code', monospace;
+      font-size: 12px;
+      color: #38bdf8;
+      max-height: 250px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+    }
+
+    /* Team Persona Footer */
+    .team-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 16px;
+      margin-top: 20px;
+    }
+
+    .team-card {
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      padding: 16px 20px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .team-avatar {
+      width: 42px;
+      height: 42px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #1e293b, #334155);
+      border: 2px solid var(--accent-cyan);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      color: #fff;
+      font-size: 14px;
+    }
+
+    .team-info h5 {
+      font-size: 14px;
+      color: #fff;
+      margin-bottom: 2px;
+    }
+
+    .team-info p {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-bottom: 0;
+    }
+
+    /* Tables */
+    .table-container {
+      overflow-x: auto;
+      margin: 16px 0;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 14px;
+    }
+
+    th {
+      background: var(--bg-tertiary);
+      color: var(--text-primary);
+      text-align: left;
+      padding: 12px 16px;
+      border-bottom: 2px solid var(--border-color);
+      font-weight: 600;
+    }
+
+    td {
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border-color);
+      color: var(--text-secondary);
+    }
+
+    tr:hover td {
+      background: rgba(255, 255, 255, 0.02);
+    }
+
+    @media (max-width: 900px) {
+      .sidebar { display: none; }
+      .main-content { margin-left: 0; padding: 24px 20px; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="app-container">
+
+  <!-- Sidebar Navigation -->
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-logo">P</div>
+      <div class="brand-text">
+        <h1>PERSONA V3</h1>
+        <span>LinkedIn Scraper Platform</span>
+      </div>
+    </div>
+
+    <div class="nav-section-title">Core Architecture</div>
+    <a href="#overview" class="nav-link active">Overview & Mission</a>
+    <a href="#architecture" class="nav-link">How It Works Under the Hood</a>
+    <a href="#auth-engine" class="nav-link">Authentication & Login</a>
+    <a href="#search-scrape" class="nav-link">Search & Scraping Engine</a>
+    <a href="#cleaning" class="nav-link">7-Stage Data Cleaner</a>
+    <a href="#bucket-queue" class="nav-link">Task Bucket & Anti-Ban</a>
+
+    <div class="nav-section-title">Setup & Deployment</div>
+    <a href="#installation" class="nav-link">Cross-Platform Installation</a>
+    <a href="#zoho-guide" class="nav-link">Zoho CRM Deluge Integration</a>
+    <a href="#postman-guide" class="nav-link">Postman Collection Guide</a>
+
+    <div class="nav-section-title">API & Testing</div>
+    <a href="#api-reference" class="nav-link">REST API Explorer (34 Endpoints)</a>
+    <a href="#live-tester" class="nav-link">Interactive Live API Tester</a>
+    <a href="#team" class="nav-link">Team Persona Authors</a>
+  </aside>
+
+  <!-- Main Content -->
+  <main class="main-content">
+
+    <!-- Hero Banner -->
+    <div class="hero-banner" id="overview">
+      <div class="hero-badge">Enterprise ASGI Microservice &bull; Production v3.0.0</div>
+      <h2 class="hero-title">Persona - LinkedIn Scraper Platform</h2>
+      <p class="hero-desc">
+        High-concurrency headless LinkedIn intelligence extraction, profile sanitization, candidate scoring, and background batch processing engine powered by <strong>FastAPI</strong>, <strong>Uvicorn</strong>, and <strong>Playwright</strong>.
+      </p>
+
+      <div class="hero-stats">
+        <div class="stat-card">
+          <div class="stat-val">34</div>
+          <div class="stat-lbl">REST API Endpoints</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-val">Single-Worker</div>
+          <div class="stat-lbl">Anti-Ban Queue Invariant</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-val">7-Stage</div>
+          <div class="stat-lbl">Noise Sanitization Sieve</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-val">100% Native</div>
+          <div class="stat-lbl">ASGI Async / Await</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Section 1: Architecture & Under the Hood -->
+    <section class="section-card" id="architecture">
+      <h3 class="section-title">
+        1. How It Works Under the Hood
+        <span class="badge">Architecture</span>
+      </h3>
+      <p>
+        Persona V3 operates as an independent, headless microservice inside the <code>SYS</code> directory. All frontend interactions are managed directly in <strong>Zoho CRM / Zoho Flow</strong>, which communicates with Persona via asynchronous HTTP REST webhooks.
+      </p>
+
+      <div class="diagram-container">
+        <div class="diagram-flow">
+          <div class="flow-step">
+            <div class="flow-step-num">1</div>
+            <div class="flow-step-body">
+              <h4>Zoho CRM Triggers Webhook</h4>
+              <p>When a recruiter clicks "Enrich Profile" in Zoho CRM, a Deluge script calls <code>POST /api/client/scrape</code> with candidate name or LinkedIn URL.</p>
+            </div>
+          </div>
+          <div class="flow-step">
+            <div class="flow-step-num">2</div>
+            <div class="flow-step-body">
+              <h4>Instant 202 Accepted Acknowledgement</h4>
+              <p>FastAPI acknowledges the request immediately with an HTTP <code>202 Accepted</code> and a tracking UUID reference number, avoiding Zoho Deluge timeout limits.</p>
+            </div>
+          </div>
+          <div class="flow-step">
+            <div class="flow-step-num">3</div>
+            <div class="flow-step-body">
+              <h4>Task Bucket Worker Consumes Task</h4>
+              <p>The continuous background consumer (<code>worker.py</code>) pops the task, controls the Playwright Chromium browser, expands text, extracts all DOM sections, and captures contact details.</p>
+            </div>
+          </div>
+          <div class="flow-step">
+            <div class="flow-step-num">4</div>
+            <div class="flow-step-body">
+              <h4>7-Stage Data Sanitization & ML Scoring</h4>
+              <p>The raw profile is cleansed of UI noise (footer links, language selectors) and scored across 15 features before being stored in <code>exports/all_scraped_profiles.json</code>.</p>
+            </div>
+          </div>
+          <div class="flow-step">
+            <div class="flow-step-num">5</div>
+            <div class="flow-step-body">
+              <h4>Zoho Scheduled Polling Auto-Populates CRM Record</h4>
+              <p>A Zoho Scheduled Function polls <code>GET /api/client/scrape-status</code> and populates candidate fields (Headline, Experience, Education, Skills) upon completion.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Section 2: Authentication Engine -->
+    <section class="section-card" id="auth-engine">
+      <h3 class="section-title">
+        2. Authentication & Login Engine
+        <span class="badge">Security</span>
+      </h3>
+      <p>Persona V3 supports two authentication pathways, with cookie injection being the gold standard:</p>
+
+      <div class="table-container">
+        <table>
+          <thead>
+            <tr>
+              <th>Method</th>
+              <th>How It Works</th>
+              <th>2FA Challenge?</th>
+              <th>Recommended Usage</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>Cookie Injection (<code>li_at</code>)</strong></td>
+              <td>Injects the official LinkedIn session cookie directly into Playwright's browser context before visiting feed.</td>
+              <td><span style="color: var(--accent-emerald); font-weight: 600;">No (100% Bypass)</span></td>
+              <td><strong>Production Standard</strong> (VPS / Headless servers)</td>
+            </tr>
+            <tr>
+              <td><strong>Form Login (Email & Password)</strong></td>
+              <td>Types username/password with human-like randomized typing delays into the login form.</td>
+              <td><span style="color: var(--accent-amber); font-weight: 600;">Possible (PIN Challenge)</span></td>
+              <td>Local development / initial setup</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="code-wrapper">
+        <div class="code-header">
+          <span class="code-lang">BASH / POSTMAN &bull; Login with Cookie</span>
+          <button class="copy-btn" onclick="copyCode('code-login')">Copy</button>
+        </div>
+        <pre id="code-login">curl -X POST "http://localhost:8000/api/scraper/login-cookie" \
+     -H "Content-Type: application/json" \
+     -d '{"li_at": "YOUR_LINKEDIN_LI_AT_COOKIE_VALUE"}'</pre>
+      </div>
+    </section>
+
+    <!-- Section 3: Search & Scraping Engine -->
+    <section class="section-card" id="search-scrape">
+      <h3 class="section-title">
+        3. Search & Scraping Engine
+        <span class="badge">Playwright Automation</span>
+      </h3>
+      <p>How Persona navigates, expands, and extracts deep profile sections from LinkedIn:</p>
+
+      <div class="table-container">
+        <table>
+          <thead>
+            <tr>
+              <th>Section</th>
+              <th>DOM Extraction Technique</th>
+              <th>Extracted Attributes</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>Header</strong></td>
+              <td>Direct top card evaluation</td>
+              <td>Full Name, Headline, Location, Current Company, Connections volume</td>
+            </tr>
+            <tr>
+              <td><strong>About</strong></td>
+              <td>Accordion expansion + sanitization</td>
+              <td>Full candidate bio & summary description</td>
+            </tr>
+            <tr>
+              <td><strong>Experience</strong></td>
+              <td>Chronological list traversal</td>
+              <td>Job Title, Company Name, Start/End Dates, Duration, Location, Responsibilities</td>
+            </tr>
+            <tr>
+              <td><strong>Education</strong></td>
+              <td>Degrees & School cards</td>
+              <td>University/Institution, Degree, Field of Study, Start/End Years</td>
+            </tr>
+            <tr>
+              <td><strong>Certifications</strong></td>
+              <td>License & Credential items</td>
+              <td>Certification Name, Issuing Organization, Issue Date, Credential URL</td>
+            </tr>
+            <tr>
+              <td><strong>Skills</strong></td>
+              <td>Skill tags & endorsements</td>
+              <td>Technical & domain skill tags (deduplicated)</td>
+            </tr>
+            <tr>
+              <td><strong>Contact Info</strong></td>
+              <td>Modal overlay (<code>/overlay/contact-info/</code>)</td>
+              <td>Direct emails, phone numbers, personal websites, and social links (enriched on Premium accounts)</td>
+            </tr>
+            <tr>
+              <td><strong>Premium Badge</strong></td>
+              <td>DOM badge & subscriber detection</td>
+              <td><code>is_premium: true/false</code> recognized automatically via Gold In-Badge and subscriber selectors</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h4 style="margin-top: 20px; font-size: 15px; color: var(--accent-cyan);">Intelligent Search Modes (Username, Name, Company & Direct URL)</h4>
+      <p style="font-size: 13.5px;">The <code>POST /api/client/scrape</code> endpoint accepts multiple search formats:</p>
+      
+      <div class="table-container">
+        <table>
+          <thead>
+            <tr>
+              <th>Mode</th>
+              <th>Example Payload</th>
+              <th>How Persona Resolves It</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>Direct Username / Handle</strong></td>
+              <td><code>{"username": "beliwaththa"}</code> or <code>{"name": "beliwaththa"}</code></td>
+              <td>Directly checks <code>https://www.linkedin.com/in/beliwaththa</code>. Zero ambiguity, fast extraction.</td>
+            </tr>
+            <tr>
+              <td><strong>First & Last Name</strong></td>
+              <td><code>{"first_name": "Bawantha", "last_name": "Beliwaththa"}</code></td>
+              <td>Searches LinkedIn people directory and extracts the top verified matching profile.</td>
+            </tr>
+            <tr>
+              <td><strong>Name + Target Company</strong></td>
+              <td><code>{"name": "Bawantha Beliwaththa", "company": "TechCorp"}</code></td>
+              <td>Filters search results strictly for candidates working at the designated company.</td>
+            </tr>
+            <tr>
+              <td><strong>Direct Profile URL</strong></td>
+              <td><code>{"profile_url": "https://www.linkedin.com/in/beliwaththa"}</code></td>
+              <td>Direct extraction of all sections, contact info, and premium status.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Section 4: 7-Stage Cleaner -->
+    <section class="section-card" id="cleaning">
+      <h3 class="section-title">
+        4. The 7-Stage Data Sanitization Sieve
+        <span class="badge">cleaner.py</span>
+      </h3>
+      <p>LinkedIn single-page applications embed UI garbage (navigation headers, footer links, language pickers) alongside user data. The <code>cleaner.py</code> pipeline strips all noise:</p>
+
+      <div class="table-container">
+        <table>
+          <thead>
+            <tr>
+              <th>Stage</th>
+              <th>Target Function</th>
+              <th>Sanitization Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>1</strong></td>
+              <td><code>_clean_value()</code></td>
+              <td>Normalizes <code>"none"</code>, <code>"null"</code>, <code>"n/a"</code>, or whitespace to Python <code>None</code>.</td>
+            </tr>
+            <tr>
+              <td><strong>2</strong></td>
+              <td><code>_clean_about()</code></td>
+              <td>Truncates footer disclaimers (<em>"Accessibility"</em>, <em>"Talent Solutions"</em>) and trailing <em>"...more"</em>.</td>
+            </tr>
+            <tr>
+              <td><strong>3</strong></td>
+              <td><code>_clean_experience_list()</code></td>
+              <td>Validates job titles/companies, removes button artifacts, deduplicates positions.</td>
+            </tr>
+            <tr>
+              <td><strong>4</strong></td>
+              <td><code>_clean_education_list()</code></td>
+              <td>Normalizes university and degree names; purges accidental skill tags.</td>
+            </tr>
+            <tr>
+              <td><strong>5</strong></td>
+              <td><code>_clean_certification_list()</code></td>
+              <td>Strips <em>"Show credential"</em> buttons; isolates issuing organization and credential URLs.</td>
+            </tr>
+            <tr>
+              <td><strong>6</strong></td>
+              <td><code>_clean_languages_list()</code></td>
+              <td>Validates against real human language dictionary to eliminate UI language selector drops.</td>
+            </tr>
+            <tr>
+              <td><strong>7</strong></td>
+              <td><code>_clean_skills_list()</code></td>
+              <td>Standardizes skill dictionaries and performs case-insensitive deduplication.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Section 5: Task Bucket & Anti-Ban -->
+    <section class="section-card" id="bucket-queue">
+      <h3 class="section-title">
+        5. Task Bucket Queue & Anti-Ban Protection
+        <span class="badge">worker.py</span>
+      </h3>
+      <p>
+        LinkedIn aggressively tracks multi-tab concurrent browsing. Persona enforces a strict <strong>Single-Worker FIFO Invariant</strong> with randomized rest delays to safeguard accounts:
+      </p>
+
+      <div class="table-container">
+        <table>
+          <thead>
+            <tr>
+              <th>Safeguard</th>
+              <th>Implementation Formula / Detail</th>
+              <th>Purpose</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>Single Consumer</strong></td>
+              <td>1 Worker Loop on native asyncio</td>
+              <td>Eliminates simultaneous multi-tab scraping bans</td>
+            </tr>
+            <tr>
+              <td><strong>Randomized Jitter</strong></td>
+              <td><code>T = random(rest_seconds, rest_seconds + 15)</code></td>
+              <td>Mimics natural human browsing variability</td>
+            </tr>
+            <tr>
+              <td><strong>Name Caching</strong></td>
+              <td>Persistent <code>name_cache.json</code></td>
+              <td>Avoids redundant repeated scraping of the same person</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Section 6: Cross-Platform Installation -->
+    <section class="section-card" id="installation">
+      <h3 class="section-title">
+        6. Cross-Platform Installation Guide
+        <span class="badge">Windows &bull; Linux &bull; macOS &bull; VPS</span>
+      </h3>
+      <p>Step-by-step setup instructions for any operating system or cloud environment:</p>
+
+      <div class="tabs-nav">
+        <button class="tab-btn active" onclick="switchTab(this, 'tab-win')">Windows (10 / 11 / Server)</button>
+        <button class="tab-btn" onclick="switchTab(this, 'tab-linux')">Linux (Ubuntu / Debian)</button>
+        <button class="tab-btn" onclick="switchTab(this, 'tab-mac')">macOS (Apple Silicon / Intel)</button>
+        <button class="tab-btn" onclick="switchTab(this, 'tab-vps')">Production VPS (Systemd + NGINX)</button>
+      </div>
+
+      <!-- Tab: Windows -->
+      <div id="tab-win" class="tab-content active">
+        <div class="code-wrapper">
+          <div class="code-header">
+            <span class="code-lang">POWERSHELL &bull; Windows Setup</span>
+            <button class="copy-btn" onclick="copyCode('code-win')">Copy</button>
+          </div>
+          <pre id="code-win"># 1. Navigate to SYS directory
+cd D:\Projects\Int\Today_done\SYS
+
+# 2. Create and activate virtual environment
+python -m venv venv
+.\venv\Scripts\Activate.ps1
+
+# 3. Install dependencies & Playwright Chromium
+pip install --upgrade pip
+pip install -r requirements.txt
+playwright install chromium
+
+# 4. Configure .env file
+Copy-Item .env.example .env
+# Edit .env and enter your LINKEDIN_LI_AT cookie
+
+# 5. Launch server
+python -m uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+# Or double-click start.bat</pre>
+        </div>
+      </div>
+
+      <!-- Tab: Linux -->
+      <div id="tab-linux" class="tab-content">
+        <div class="code-wrapper">
+          <div class="code-header">
+            <span class="code-lang">BASH &bull; Ubuntu 22.04 LTS / Debian Setup</span>
+            <button class="copy-btn" onclick="copyCode('code-linux')">Copy</button>
+          </div>
+          <pre id="code-linux"># 1. Install system prerequisites
+sudo apt update && sudo apt upgrade -y
+sudo apt install -y python3-pip python3-venv git curl libglib2.0-0 libnss3 libnspr4
+
+# 2. Setup project folder
+cd /opt/persona/SYS
+python3 -m venv venv
+source venv/bin/activate
+
+# 3. Install Python dependencies and Playwright system libraries
+pip install --upgrade pip
+pip install -r requirements.txt
+playwright install chromium
+playwright install-deps chromium
+
+# 4. Configure environment
+cp .env.example .env
+nano .env   # Set HEADLESS=true, LINKEDIN_LI_AT=your_cookie
+
+# 5. Launch with startup script
+chmod +x start.sh
+./start.sh</pre>
+        </div>
+      </div>
+
+      <!-- Tab: macOS -->
+      <div id="tab-mac" class="tab-content">
+        <div class="code-wrapper">
+          <div class="code-header">
+            <span class="code-lang">BASH &bull; macOS Setup</span>
+            <button class="copy-btn" onclick="copyCode('code-mac')">Copy</button>
+          </div>
+          <pre id="code-mac"># 1. Install Homebrew & Python (if needed)
+brew install python@3.11
+
+# 2. Navigate and create environment
+cd /path/to/Today_done/SYS
+python3 -m venv venv
+source venv/bin/activate
+
+# 3. Install modules & Chromium
+pip install -r requirements.txt
+playwright install chromium
+
+# 4. Start Uvicorn
+uvicorn main:app --host 0.0.0.0 --port 8000 --reload</pre>
+        </div>
+      </div>
+
+      <!-- Tab: VPS -->
+      <div id="tab-vps" class="tab-content">
+        <div class="code-wrapper">
+          <div class="code-header">
+            <span class="code-lang">SYSTEMD &bull; /etc/systemd/system/persona.service</span>
+            <button class="copy-btn" onclick="copyCode('code-vps')">Copy</button>
+          </div>
+          <pre id="code-vps">[Unit]
+Description=Persona - LinkedIn Scraper Platform ASGI Microservice
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/persona/SYS
+ExecStart=/opt/persona/SYS/venv/bin/uvicorn main:app --host 0.0.0.0 --port 8000 --workers 1
+Restart=always
+RestartSec=5
+EnvironmentFile=/opt/persona/SYS/.env
+
+[Install]
+WantedBy=multi-user.target</pre>
+        </div>
+        <p style="margin-top: 10px;">Enable and start the service with: <code>sudo systemctl enable --now persona</code></p>
+      </div>
+    </section>
+
+    <!-- Section 7: Zoho CRM Integration -->
+    <section class="section-card" id="zoho-guide">
+      <h3 class="section-title">
+        7. Zoho CRM Deluge Integration Manual
+        <span class="badge">Deluge Code</span>
+      </h3>
+      <p>Deploy these two Deluge scripts into Zoho CRM to enable single-click candidate enrichment and background polling:</p>
+
+      <h4 style="color: #fff; margin: 16px 0 8px;">Script 1: Trigger Button (Candidate Module &rarr; Custom Button)</h4>
+      <div class="code-wrapper">
+        <div class="code-header">
+          <span class="code-lang">ZOHO DELUGE &bull; Candidate Trigger</span>
+          <button class="copy-btn" onclick="copyCode('code-deluge-1')">Copy</button>
+        </div>
+        <pre id="code-deluge-1">candidateId = targetCandidateId.toLong();
+candidateRecord = zoho.crm.getRecordById("Candidates", candidateId);
+
+candidateName = candidateRecord.get("Full_Name");
+linkedinUrl = candidateRecord.get("LinkedIn_URL");
+
+serverUrl = "http://your-server-ip:8000/api/client/scrape";
+
+payload = Map();
+if (linkedinUrl != null && linkedinUrl != "") {
+    payload.put("profile_url", linkedinUrl);
+} else {
+    payload.put("name", candidateName);
+}
+
+headers = Map();
+headers.put("Content-Type", "application/json");
+
+response = invokeurl [
+    url: serverUrl,
+    type: POST,
+    parameters: payload.toString(),
+    headers: headers
+];
+
+if (response.get("success") == true) {
+    refNumber = response.get("reference_number");
+    updateMap = Map();
+    updateMap.put("Enrichment_Status", "In Progress");
+    updateMap.put("Persona_Reference", refNumber);
+    zoho.crm.updateRecord("Candidates", candidateId, updateMap);
+    return "Task queued in Persona bucket. Reference: " + refNumber;
+} else {
+    return "Error: " + response.get("error");
+}</pre>
+      </div>
+
+      <h4 style="color: #fff; margin: 20px 0 8px;">Script 2: Scheduled Polling Function (Settings &rarr; Scheduled Functions)</h4>
+      <div class="code-wrapper">
+        <div class="code-header">
+          <span class="code-lang">ZOHO DELUGE &bull; Scheduled Polling Sync</span>
+          <button class="copy-btn" onclick="copyCode('code-deluge-2')">Copy</button>
+        </div>
+        <pre id="code-deluge-2">inProgressCandidates = zoho.crm.searchRecords("Candidates", "(Enrichment_Status:equals:In Progress)");
+
+for each candidate in inProgressCandidates {
+    candidateId = candidate.get("id");
+    refNumber = candidate.get("Persona_Reference");
+    
+    if (refNumber != null && refNumber != "") {
+        statusUrl = "http://your-server-ip:8000/api/client/scrape-status?task_id=" + refNumber;
+        statusResponse = invokeurl [ url: statusUrl, type: GET ];
+        
+        if (statusResponse.get("status") == "completed") {
+            profiles = statusResponse.get("profiles");
+            if (profiles.size() > 0) {
+                p = profiles.get(0);
+                updateData = Map();
+                updateData.put("Enrichment_Status", "Completed");
+                updateData.put("Current_Job", p.get("headline"));
+                updateData.put("Location", p.get("location"));
+                updateData.put("Summary", p.get("about"));
+                updateData.put("LinkedIn_URL", p.get("profile_url"));
+                zoho.crm.updateRecord("Candidates", candidateId, updateData);
+            }
+        }
+    }
+}</pre>
+      </div>
+    </section>
+
+    <!-- Section 8: Postman Guide -->
+    <section class="section-card" id="postman-guide">
+      <h3 class="section-title">
+        8. Postman Testing Guide & Collection
+        <span class="badge">API Collection</span>
+      </h3>
+      <p>Test all routes with the pre-built Postman collection or direct OpenAPI schema:</p>
+
+      <div class="table-container">
+        <table>
+          <thead>
+            <tr>
+              <th>Method</th>
+              <th>File / URL</th>
+              <th>How to Use in Postman</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>Pre-built Collection</strong></td>
+              <td><code>SYS/Persona_V3_Postman_Collection.json</code></td>
+              <td>Click <strong>Import</strong> &rarr; Drag and drop file &rarr; Organized into 6 folders.</td>
+            </tr>
+            <tr>
+              <td><strong>1-Click OpenAPI URL</strong></td>
+              <td><code>http://localhost:8000/openapi.json</code></td>
+              <td>Click <strong>Import</strong> &rarr; Paste URL into the import bar &rarr; Auto-generates all 34 routes.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Section 9: REST API Explorer -->
+    <section class="section-card" id="api-reference">
+      <h3 class="section-title">
+        9. REST API Reference Explorer
+        <span class="badge">34 Endpoints</span>
+      </h3>
+      <p>Key endpoints for Zoho CRM and programmatic integrations:</p>
+
+      <!-- Endpoint 1 -->
+      <div class="endpoint-card">
+        <div class="endpoint-header">
+          <span class="method-badge method-post">POST</span>
+          <span class="endpoint-path">/api/client/scrape</span>
+          <span class="endpoint-desc">Primary Zoho Webhook (Enqueue Single Scrape)</span>
+        </div>
+        <div class="endpoint-body">
+          <p style="font-size: 13px; margin-bottom: 6px;">Request Body:</p>
+          <pre style="margin-bottom: 8px;">{ "name": "Bawantha Beliwaththa", "profile_url": "https://www.linkedin.com/in/bawantha-beliwaththa" }</pre>
+          <p style="font-size: 13px; margin-bottom: 6px;">Response (202 Accepted):</p>
+          <pre>{ "success": true, "status": "queued", "reference_number": "7e20424d-59ce-4875-9a27-48c2f0ada341" }</pre>
+        </div>
+      </div>
+
+      <!-- Endpoint 2 -->
+      <div class="endpoint-card">
+        <div class="endpoint-header">
+          <span class="method-badge method-get">GET</span>
+          <span class="endpoint-path">/api/client/scrape-status?task_id={id}&name={name}</span>
+          <span class="endpoint-desc">Track Scrape Status & Retrieve Clean Profile</span>
+        </div>
+        <div class="endpoint-body">
+          <p style="font-size: 13px; margin-bottom: 6px;">Response (200 OK - Completed):</p>
+          <pre>{ "success": true, "status": "completed", "profiles": [{ "name": "Bawantha Beliwaththa", "headline": "Lead Systems Architect", ... }] }</pre>
+        </div>
+      </div>
+
+      <!-- Endpoint 3 -->
+      <div class="endpoint-card">
+        <div class="endpoint-header">
+          <span class="method-badge method-post">POST</span>
+          <span class="endpoint-path">/api/persona/bulk-scrape</span>
+          <span class="endpoint-desc">Enqueue Bulk Batch Scrape List</span>
+        </div>
+        <div class="endpoint-body">
+          <p style="font-size: 13px; margin-bottom: 6px;">Request Body:</p>
+          <pre>{ "profile_urls": ["https://linkedin.com/in/alpha", "Navod Ranasinghe"], "return_code": "BATCH-001" }</pre>
+        </div>
+      </div>
+
+      <!-- Endpoint 4 -->
+      <div class="endpoint-card">
+        <div class="endpoint-header">
+          <span class="method-badge method-get">GET</span>
+          <span class="endpoint-path">/api/bucket/status</span>
+          <span class="endpoint-desc">Get Queue Health & Task Counts</span>
+        </div>
+        <div class="endpoint-body">
+          <pre>{ "success": true, "worker_running": true, "summary": { "pending": 2, "in_progress": 1, "completed": 15, "failed": 0 } }</pre>
+        </div>
+      </div>
+    </section>
+
+    <!-- Section 10: Interactive Live API Tester -->
+    <section class="section-card" id="live-tester">
+      <h3 class="section-title">
+        10. Interactive Live API Tester
+        <span class="badge">Real-Time</span>
+      </h3>
+      <p>Send live HTTP requests directly to your running Uvicorn server and inspect the response:</p>
+
+      <div class="tester-box">
+        <div class="tester-row">
+          <select id="testMethod" class="tester-input" style="max-width: 120px;">
+            <option value="GET">GET</option>
+            <option value="POST">POST</option>
+          </select>
+          <input type="text" id="testEndpoint" class="tester-input" value="/api/bucket/status">
+          <button class="btn-test" onclick="runLiveTest()">Send Request</button>
+        </div>
+
+        <div style="margin-bottom: 8px; font-size: 12px; color: var(--text-muted);">Request Payload (for POST):</div>
+        <textarea id="testPayload" class="tester-input" style="width: 100%; height: 70px; margin-bottom: 12px;" placeholder='{"name": "Bawantha Beliwaththa", "profile_url": "https://www.linkedin.com/in/bawantha-beliwaththa"}'></textarea>
+
+        <div style="margin-bottom: 6px; font-size: 12px; color: var(--text-muted);">Response Output:</div>
+        <div id="testOutput" class="tester-output">// Live server response will appear here...</div>
+      </div>
+    </section>
+
+    <!-- Section 11: Team Persona Authors -->
+    <section class="section-card" id="team">
+      <h3 class="section-title">
+        11. Engineering Team & Authors
+        <span class="badge">Team Persona</span>
+      </h3>
+      <p>The Persona - LinkedIn Scraper platform was architected and built by Team Persona:</p>
+
+      <div class="team-grid">
+        <div class="team-card">
+          <div class="team-avatar">GB</div>
+          <div class="team-info">
+            <h5>G.L.B.M. Beliwaththa</h5>
+            <p>Lead Systems Architect & Core Engine Engineer</p>
+          </div>
+        </div>
+
+        <div class="team-card">
+          <div class="team-avatar">YA</div>
+          <div class="team-info">
+            <h5>Yuvindu Lakshin Arthanayaka</h5>
+            <p>Asynchronous Subsystems & Scraper Engineer</p>
+          </div>
+        </div>
+
+        <div class="team-card">
+          <div class="team-avatar">NR</div>
+          <div class="team-info">
+            <h5>Navod Ranasinghe</h5>
+            <p>Data Pipeline & Sanitization Specialist</p>
+          </div>
+        </div>
+
+        <div class="team-card">
+          <div class="team-avatar">HK</div>
+          <div class="team-info">
+            <h5>Hansika Kavindi</h5>
+            <p>ML Scoring & Profile Ranking Architect</p>
+          </div>
+        </div>
+
+        <div class="team-card">
+          <div class="team-avatar">YS</div>
+          <div class="team-info">
+            <h5>Yadavi Shreedhar</h5>
+            <p>API Design & Integration Engineer</p>
+          </div>
+        </div>
+
+        <div class="team-card">
+          <div class="team-avatar">LU</div>
+          <div class="team-info">
+            <h5>Lingaraj Uthayakumar</h5>
+            <p>DevOps, Infrastructure & Security Specialist</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<script>
+  // Copy to clipboard helper
+  function copyCode(elementId) {
+    const text = document.getElementById(elementId).innerText;
+    navigator.clipboard.writeText(text).then(() => {
+      alert("Code copied to clipboard!");
+    });
+  }
+
+  // Switch installation tabs
+  function switchTab(btn, tabId) {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+    
+    btn.classList.add('active');
+    const target = document.getElementById(tabId);
+    if (target) target.classList.add('active');
+  }
+
+  // Interactive Live API Tester
+  async function runLiveTest() {
+    const method = document.getElementById('testMethod').value;
+    const endpoint = document.getElementById('testEndpoint').value;
+    const payloadStr = document.getElementById('testPayload').value.trim();
+    const outputEl = document.getElementById('testOutput');
+
+    outputEl.innerText = "Sending request to " + endpoint + "...";
+
+    try {
+      const options = {
+        method: method,
+        headers: { "Content-Type": "application/json" }
+      };
+
+      if (method === "POST" && payloadStr) {
+        options.body = payloadStr;
+      }
+
+      const response = await fetch(endpoint, options);
+      const data = await response.json();
+      outputEl.innerText = JSON.stringify(data, null, 2);
+    } catch (err) {
+      outputEl.innerText = "Error connecting to server:\n" + err.message + "\n\nMake sure the Uvicorn server is running on http://localhost:8000.";
+    }
+  }
+
+  // Smooth scroll and active link toggle with IntersectionObserver
+  const navLinks = document.querySelectorAll('.nav-link');
+  const sections = document.querySelectorAll('section, .hero-banner');
+
+  window.addEventListener('scroll', () => {
+    let current = '';
+    sections.forEach(section => {
+      const sectionTop = section.offsetTop - 100;
+      if (pageYOffset >= sectionTop) {
+        current = section.getAttribute('id');
+      }
+    });
+
+    navLinks.forEach(link => {
+      link.classList.remove('active');
+      if (link.getAttribute('href') === '#' + current) {
+        link.classList.add('active');
+      }
+    });
+  });
+</script>
+
+</body>
+</html>
