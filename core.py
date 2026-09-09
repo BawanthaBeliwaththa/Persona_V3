@@ -1414,6 +1414,11 @@ class LinkedInScraper:
 
             candidate = raw_lines[index]
 
+            # LinkedIn sometimes places role skills after the experience.
+            # They are not a location.
+            if candidate.strip().lower().startswith(('skills:', 'skill:')):
+                return '', index + 1
+
             if _looks_like_duration(candidate):
                 return '', index
 
