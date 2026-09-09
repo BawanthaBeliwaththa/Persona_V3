@@ -1366,7 +1366,7 @@ class LinkedInScraper:
 
     def _parse_all_experiences(self, text: str, max_entries: int = 20) -> List[Dict]:
         """
-        Parse all experience entries from detail-page text.
+        Parse LinkedIn experience entries, including multiple positions per company
 
         Strategy: clean lines, find the section start, then group consecutive
         non-noise lines into entries.  An entry boundary is detected when we
@@ -1377,12 +1377,13 @@ class LinkedInScraper:
             return []
 
         lines = self._clean_lines(text)
-        # Find where the Experience section begins
+
         start = -1
-        for i, l in enumerate(lines):
-            if l.strip() in ('Experience', 'Experiences'):
+        for i, line in enumerate(lines):
+            if line.strip() in ('Experience', 'Experiences'):
                 start = i + 1
                 break
+
         if start == -1:
             start = 0
 
@@ -1393,59 +1394,116 @@ class LinkedInScraper:
         }
 
         raw_lines = []
-        for l in lines[start:]:
-            if l in section_end_markers:
+        for line in lines[start:]:
+            if line in section_end_markers:
                 break
-            raw_lines.append(l)
+            raw_lines.append(line)
 
-        if not raw_lines:
-            return []
+        company_duration_re = re.compile(
+            r'^\d+\s*(yr|yrs|year|years|mo|mos|month|months)'
+            r'(\s+\d+\s*(yr|yrs|year|years|mo|mos|month|months))?$',
+            re.I
+        )
 
-        # Group into entries — each entry: title, company, duration, location, description
+        def is_company_duration(value: str) -> bool:
+            return bool(company_duration_re.match(value.strip()))
+
+        def read_location(index: int):
+            if index >= len(raw_lines):
+                return '', index
+
+            candidate = raw_lines[index]
+
+            # LinkedIn sometimes places role skills after the experience.
+            # They are not a location.
+            if candidate.strip().lower().startswith(('skills:', 'skill:')):
+                return '', index + 1
+
+            if _looks_like_duration(candidate):
+                return '', index
+
+            # A following duration usually means candidate is the next title,
+            # not the location of the current position.
+            if index + 1 < len(raw_lines):
+                if _looks_like_duration(raw_lines[index + 1]):
+                    return '', index
+
+            return candidate, index + 1
+
         entries = []
         i = 0
+
         while i < len(raw_lines) and len(entries) < max_entries:
+            # LinkedIn grouped-company format:
+            #
+            # Company
+            # 1 yr 6 mos
+            # Position title
+            # Jan 2024 - Present
+            # Location
+            #
+            if i + 1 < len(raw_lines) and is_company_duration(raw_lines[i + 1]):
+                company = raw_lines[i]
+                company_duration = raw_lines[i + 1]
+                i += 2
+                company_entries = 0
+
+                while i < len(raw_lines) and len(entries) < max_entries:
+                    # A new company starts when it is followed by a company-level duration.
+                    if (
+                        company_entries > 0
+                        and i + 1 < len(raw_lines)
+                        and is_company_duration(raw_lines[i + 1])
+                    ):
+                        break
+
+                    title = raw_lines[i]
+                    i += 1
+
+                    duration = ''
+                    if i < len(raw_lines) and _looks_like_duration(raw_lines[i]):
+                        duration = raw_lines[i]
+                        i += 1
+
+                    location, i = read_location(i)
+
+                    entries.append({
+                        'title': title,
+                        'company': company,
+                        'duration': duration or company_duration,
+                        'location': location,
+                    })
+                    company_entries += 1
+
+                continue
+
+            # Standard single-position format:
+            #
+            # Position title
+            # Company
+            # Jan 2024 - Present
+            # Location
             title = raw_lines[i]
             i += 1
-            company = duration = location = ''
 
+            company = ''
             if i < len(raw_lines) and not _looks_like_duration(raw_lines[i]):
                 company = raw_lines[i]
                 i += 1
 
+            duration = ''
             if i < len(raw_lines) and _looks_like_duration(raw_lines[i]):
                 duration = raw_lines[i]
                 i += 1
 
-            # Optional location line (doesn't look like a date/duration or the next job title)
-            if i < len(raw_lines):
-                nxt = raw_lines[i]
-                if not _looks_like_duration(nxt) and len(nxt) < 80:
-                    # Peek ahead: if what follows is a duration, this is a location
-                    if (i + 1 < len(raw_lines) and _looks_like_duration(raw_lines[i + 1])) or \
-                       (i + 1 >= len(raw_lines)):
-                        location = nxt
-                        i += 1
+            location, i = read_location(i)
 
-            # Skip any remaining description lines until next "title" candidate
-            # (We skip long description text — it's rarely structured)
-            while i < len(raw_lines):
-                nxt = raw_lines[i]
-                if _looks_like_duration(nxt):
-                    i += 1  # skip stray duration lines
-                    continue
-                # If next line could be a new job title (short, not a duration), stop
-                if len(nxt) < 120 and not _looks_like_duration(nxt):
-                    break
-                i += 1  # skip long description text
-
-            if title:
-                entries.append({
-                    'title': title,
-                    'company': company,
-                    'duration': duration,
-                    'location': location,
-                })
+            entries.append({
+                'title': title,
+                'company': company,
+                'duration': duration,
+                'location': location,
+            })
 
         return entries
 
