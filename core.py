@@ -743,7 +743,7 @@ class LinkedInScraper:
             if 'feed' in base_url and 'login' not in base_url and 'checkpoint' not in base_url:
                 self.is_authenticated = True
                 return True
-            
+
             await self.page.goto('https://www.linkedin.com/feed/', wait_until='domcontentloaded', timeout=15000)
             await asyncio.sleep(1)
             base_url = self.page.url.split('?')[0].rstrip('/')
@@ -773,7 +773,7 @@ class LinkedInScraper:
             has_premium_icon = await self.page.evaluate('''() => {
                 return !!document.querySelector('li-icon[type="premium-brand"], svg.premium-icon, svg[data-supported-dps="24x24_premium_icon"]');
             }''')
-            
+
             # If we explicitly see "Try Premium for free", it's false.
             if is_free:
                 return False
@@ -793,16 +793,16 @@ class LinkedInScraper:
         keyword = email if email else phone
         if not keyword:
             return []
-            
+
         search_url = f"https://www.linkedin.com/search/results/people/?keywords={keyword}"
         await self.page.goto(search_url, wait_until='domcontentloaded', timeout=30000)
         await asyncio.sleep(3)
-        
+
         # Scroll to load results
         for _ in range(5):
             await self.page.evaluate('window.scrollBy(0, 500)')
             await asyncio.sleep(0.5)
-            
+
         results = await self.page.evaluate('''() => {
             const items = document.querySelectorAll('li.reusable-search__result-container');
             const data = [];
@@ -839,7 +839,7 @@ class LinkedInScraper:
             cookie_val = str(li_at).strip()
             if 'li_at=' in cookie_val:
                 cookie_val = cookie_val.split('li_at=')[1].split(';')[0].strip()
-            
+
             domain_cookies = [
                 {'name': 'li_at', 'value': cookie_val, 'domain': '.www.linkedin.com', 'path': '/'},
                 {'name': 'li_at', 'value': cookie_val, 'domain': '.linkedin.com', 'path': '/'}
@@ -918,7 +918,7 @@ class LinkedInScraper:
         email = email or os.environ.get('LINKEDIN_EMAIL', "uov.agri.faculty@gmail.com")
         password = password or os.environ.get('LINKEDIN_PASSWORD', "Hello@2026")
         li_at_env = li_at or os.environ.get('LINKEDIN_LI_AT') or os.environ.get('LI_AT')
-        
+
         # 1. Try session cookie bypass if li_at cookie is available in env or args
         if li_at_env:
             print("[Login] Attempting session cookie (li_at) bypass...")
@@ -932,7 +932,7 @@ class LinkedInScraper:
         await self.ensure_active_page()
         await self.page.goto('https://www.linkedin.com/login', wait_until='domcontentloaded')
         await asyncio.sleep(2)
-        
+
         base_url = self.page.url.split('?')[0].rstrip('/')
         if 'feed' in base_url and 'login' not in base_url and 'checkpoint' not in base_url:
             self.is_authenticated = True
@@ -972,7 +972,7 @@ class LinkedInScraper:
             elif 'checkpoint' in base_url or 'challenge' in base_url:
                 self.verification_required = True
                 print(f"[Login] Email verification checkpoint detected! URL: {self.page.url}")
-                
+
         base_url = self.page.url.split('?')[0].rstrip('/')
         if 'feed' in base_url and 'login' not in base_url and 'checkpoint' not in base_url:
             self.is_authenticated = True
@@ -1116,7 +1116,7 @@ class LinkedInScraper:
             base_url = profile_url.rstrip('/')
             detail_texts: Dict[str, str] = {}
             contact_info: Dict[str, str] = {}
-            
+
             detail_pages = {
                 'experience':      f"{base_url}/details/experience/",
                 'education':       f"{base_url}/details/education/",
@@ -1366,7 +1366,7 @@ class LinkedInScraper:
 
     def _parse_all_experiences(self, text: str, max_entries: int = 20) -> List[Dict]:
         """
-        Parse LinkedIn experience entries, including multiple positions per company
+        Parse all experience entries from detail-page text.
 
         Strategy: clean lines, find the section start, then group consecutive
         non-noise lines into entries.  An entry boundary is detected when we
@@ -1377,13 +1377,12 @@ class LinkedInScraper:
             return []
 
         lines = self._clean_lines(text)
-
+        # Find where the Experience section begins
         start = -1
-        for i, line in enumerate(lines):
-            if line.strip() in ('Experience', 'Experiences'):
+        for i, l in enumerate(lines):
+            if l.strip() in ('Experience', 'Experiences'):
                 start = i + 1
                 break
-
         if start == -1:
             start = 0
 
@@ -1394,116 +1393,59 @@ class LinkedInScraper:
         }
 
         raw_lines = []
-        for line in lines[start:]:
-            if line in section_end_markers:
+        for l in lines[start:]:
+            if l in section_end_markers:
                 break
-            raw_lines.append(line)
+            raw_lines.append(l)
 
-        company_duration_re = re.compile(
-            r'^\d+\s*(yr|yrs|year|years|mo|mos|month|months)'
-            r'(\s+\d+\s*(yr|yrs|year|years|mo|mos|month|months))?$',
-            re.I
-        )
+        if not raw_lines:
+            return []
 
-        def is_company_duration(value: str) -> bool:
-            return bool(company_duration_re.match(value.strip()))
-
-        def read_location(index: int):
-            if index >= len(raw_lines):
-                return '', index
-
-            candidate = raw_lines[index]
-
-            # LinkedIn sometimes places role skills after the experience.
-            # They are not a location.
-            if candidate.strip().lower().startswith(('skills:', 'skill:')):
-                return '', index + 1
-
-            if _looks_like_duration(candidate):
-                return '', index
-
-            # A following duration usually means candidate is the next title,
-            # not the location of the current position.
-            if index + 1 < len(raw_lines):
-                if _looks_like_duration(raw_lines[index + 1]):
-                    return '', index
-
-            return candidate, index + 1
-
+        # Group into entries — each entry: title, company, duration, location, description
         entries = []
         i = 0
-
         while i < len(raw_lines) and len(entries) < max_entries:
-            # LinkedIn grouped-company format:
-            #
-            # Company
-            # 1 yr 6 mos
-            # Position title
-            # Jan 2024 - Present
-            # Location
-            #
-            if i + 1 < len(raw_lines) and is_company_duration(raw_lines[i + 1]):
-                company = raw_lines[i]
-                company_duration = raw_lines[i + 1]
-                i += 2
-                company_entries = 0
-
-                while i < len(raw_lines) and len(entries) < max_entries:
-                    # A new company starts when it is followed by a company-level duration.
-                    if (
-                        company_entries > 0
-                        and i + 1 < len(raw_lines)
-                        and is_company_duration(raw_lines[i + 1])
-                    ):
-                        break
-
-                    title = raw_lines[i]
-                    i += 1
-
-                    duration = ''
-                    if i < len(raw_lines) and _looks_like_duration(raw_lines[i]):
-                        duration = raw_lines[i]
-                        i += 1
-
-                    location, i = read_location(i)
-
-                    entries.append({
-                        'title': title,
-                        'company': company,
-                        'duration': duration or company_duration,
-                        'location': location,
-                    })
-                    company_entries += 1
-
-                continue
-
-            # Standard single-position format:
-            #
-            # Position title
-            # Company
-            # Jan 2024 - Present
-            # Location
             title = raw_lines[i]
             i += 1
+            company = duration = location = ''
 
-            company = ''
             if i < len(raw_lines) and not _looks_like_duration(raw_lines[i]):
                 company = raw_lines[i]
                 i += 1
 
-            duration = ''
             if i < len(raw_lines) and _looks_like_duration(raw_lines[i]):
                 duration = raw_lines[i]
                 i += 1
 
-            location, i = read_location(i)
+            # Optional location line (doesn't look like a date/duration or the next job title)
+            if i < len(raw_lines):
+                nxt = raw_lines[i]
+                if not _looks_like_duration(nxt) and len(nxt) < 80:
+                    # Peek ahead: if what follows is a duration, this is a location
+                    if (i + 1 < len(raw_lines) and _looks_like_duration(raw_lines[i + 1])) or \
+                       (i + 1 >= len(raw_lines)):
+                        location = nxt
+                        i += 1
 
-            entries.append({
-                'title': title,
-                'company': company,
-                'duration': duration,
-                'location': location,
-            })
+            # Skip any remaining description lines until next "title" candidate
+            # (We skip long description text — it's rarely structured)
+            while i < len(raw_lines):
+                nxt = raw_lines[i]
+                if _looks_like_duration(nxt):
+                    i += 1  # skip stray duration lines
+                    continue
+                # If next line could be a new job title (short, not a duration), stop
+                if len(nxt) < 120 and not _looks_like_duration(nxt):
+                    break
+                i += 1  # skip long description text
+
+            if title:
+                entries.append({
+                    'title': title,
+                    'company': company,
+                    'duration': duration,
+                    'location': location,
+                })
 
         return entries
 
@@ -2000,11 +1942,11 @@ class LinkedInScraper:
             for r in results:
                 name_lower = r.get('name', '').lower()
                 url_lower = r.get('profile_url', '').lower()
-                
+
                 # Filter out anonymous profiles
                 if not r.get('name') or r.get('name') in ('LinkedIn Member', 'LinkedIn User'):
                     continue
-                    
+
                 # Filter by name keywords if query name is provided
                 if query_words:
                     match = False
@@ -2018,7 +1960,7 @@ class LinkedInScraper:
                         print(f"Skipping unrelated search result: {r.get('name')} ({r.get('profile_url')})")
                         continue
                 filtered_results.append(r)
-                
+
             return filtered_results[:max_results]
         except Exception as e:
             err_msg = str(e)
