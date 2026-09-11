@@ -1364,90 +1364,234 @@ class LinkedInScraper:
         entries = self._parse_all_experiences(text)
         return entries[0] if entries else {}
 
+    # def _parse_all_experiences(self, text: str, max_entries: int = 20) -> List[Dict]:
+    #     """
+    #     Parse all experience entries from detail-page text.
+
+    #     Strategy: clean lines, find the section start, then group consecutive
+    #     non-noise lines into entries.  An entry boundary is detected when we
+    #     see a line that looks like a duration / date range, which always
+    #     appears before the next title.
+    #     """
+    #     if not text:
+    #         return []
+
+    #     lines = self._clean_lines(text)
+    #     # Find where the Experience section begins
+    #     start = -1
+    #     for i, l in enumerate(lines):
+    #         if l.strip() in ('Experience', 'Experiences'):
+    #             start = i + 1
+    #             break
+    #     if start == -1:
+    #         start = 0
+
+    #     section_end_markers = {
+    #         'Education', 'Licenses & certifications', 'Skills', 'Interests',
+    #         'Activity', 'Recommendations', 'Honors & awards', 'Languages',
+    #         'Volunteer experience', 'Projects', 'Publications', 'Certifications',
+    #     }
+
+    #     raw_lines = []
+    #     for l in lines[start:]:
+    #         if l in section_end_markers:
+    #             break
+    #         raw_lines.append(l)
+
+    #     if not raw_lines:
+    #         return []
+
+    #     # Group into entries — each entry: title, company, duration, location, description
+    #     entries = []
+    #     i = 0
+    #     while i < len(raw_lines) and len(entries) < max_entries:
+    #         title = raw_lines[i]
+    #         i += 1
+    #         company = duration = location = ''
+
+    #         if i < len(raw_lines) and not _looks_like_duration(raw_lines[i]):
+    #             company = raw_lines[i]
+    #             i += 1
+
+    #         if i < len(raw_lines) and _looks_like_duration(raw_lines[i]):
+    #             duration = raw_lines[i]
+    #             i += 1
+
+    #         # Optional location line (doesn't look like a date/duration or the next job title)
+    #         if i < len(raw_lines):
+    #             nxt = raw_lines[i]
+    #             if not _looks_like_duration(nxt) and len(nxt) < 80:
+    #                 # Peek ahead: if what follows is a duration, this is a location
+    #                 if (i + 1 < len(raw_lines) and _looks_like_duration(raw_lines[i + 1])) or \
+    #                    (i + 1 >= len(raw_lines)):
+    #                     location = nxt
+    #                     i += 1
+
+    #         # Skip any remaining description lines until next "title" candidate
+    #         # (We skip long description text — it's rarely structured)
+    #         while i < len(raw_lines):
+    #             nxt = raw_lines[i]
+    #             if _looks_like_duration(nxt):
+    #                 i += 1  # skip stray duration lines
+    #                 continue
+    #             # If next line could be a new job title (short, not a duration), stop
+    #             if len(nxt) < 120 and not _looks_like_duration(nxt):
+    #                 break
+    #             i += 1  # skip long description text
+
+    #         if title:
+    #             entries.append({
+    #                 'title': title,
+    #                 'company': company,
+    #                 'duration': duration,
+    #                 'location': location,
+    #             })
+
+    #     return entries
+
+
     def _parse_all_experiences(self, text: str, max_entries: int = 20) -> List[Dict]:
         """
-        Parse all experience entries from detail-page text.
+        Parse LinkedIn experience text.
 
-        Strategy: clean lines, find the section start, then group consecutive
-        non-noise lines into entries.  An entry boundary is detected when we
-        see a line that looks like a duration / date range, which always
-        appears before the next title.
+        Output structure is always:
+        {
+            'title': '',
+            'company': '',
+            'duration': '',
+            'location': ''
+        }
         """
         if not text:
             return []
 
         lines = self._clean_lines(text)
-        # Find where the Experience section begins
-        start = -1
-        for i, l in enumerate(lines):
-            if l.strip() in ('Experience', 'Experiences'):
-                start = i + 1
+
+        start = 0
+        for index, line in enumerate(lines):
+            if line.strip() in ('Experience', 'Experiences'):
+                start = index + 1
                 break
-        if start == -1:
-            start = 0
 
         section_end_markers = {
-            'Education', 'Licenses & certifications', 'Skills', 'Interests',
-            'Activity', 'Recommendations', 'Honors & awards', 'Languages',
-            'Volunteer experience', 'Projects', 'Publications', 'Certifications',
+            'Education',
+            'Licenses & certifications',
+            'Skills',
+            'Interests',
+            'Activity',
+            'Recommendations',
+            'Honors & awards',
+            'Languages',
+            'Volunteer experience',
+            'Projects',
+            'Publications',
+            'Certifications',
         }
 
         raw_lines = []
-        for l in lines[start:]:
-            if l in section_end_markers:
+        for line in lines[start:]:
+            if line in section_end_markers:
                 break
-            raw_lines.append(l)
+            if line.lower().startswith('skills:'):
+                continue
+            raw_lines.append(line)
 
         if not raw_lines:
             return []
 
-        # Group into entries — each entry: title, company, duration, location, description
+        date_pattern = re.compile(
+            r'^(?:'
+            r'(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)'
+            r'\s+\d{4}\s*-\s*'
+            r'(?:Present|Current|Now|'
+            r'(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{4})'
+            r'(?:\s*·.*)?'
+            r'|'
+            r'\d{4}\s*-\s*(?:Present|Current|Now|\d{4})'
+            r'(?:\s*·.*)?'
+            r')$',
+            re.IGNORECASE,
+        )
+
+        company_duration_pattern = re.compile(
+            r'^(?:(?:Full-time|Part-time|Contract|Freelance|Self-employed)'
+            r'\s*·\s*)?\d+\s+(?:yr|yrs|year|years|mo|mos|month|months)'
+            r'(?:\s+\d+\s+(?:yr|yrs|year|years|mo|mos|month|months))?$',
+            re.IGNORECASE,
+        )
+
+        def is_date(value: str) -> bool:
+            return bool(date_pattern.match(value.strip()))
+
+        def is_company_duration(value: str) -> bool:
+            return bool(company_duration_pattern.match(value.strip()))
+
         entries = []
-        i = 0
-        while i < len(raw_lines) and len(entries) < max_entries:
-            title = raw_lines[i]
-            i += 1
-            company = duration = location = ''
+        index = 0
+        current_company = ''
+        company_duration = ''
 
-            if i < len(raw_lines) and not _looks_like_duration(raw_lines[i]):
-                company = raw_lines[i]
-                i += 1
+        while index < len(raw_lines) and len(entries) < max_entries:
+            line = raw_lines[index].strip()
 
-            if i < len(raw_lines) and _looks_like_duration(raw_lines[i]):
-                duration = raw_lines[i]
-                i += 1
+            if not line or line.lower().startswith('skills:'):
+                index += 1
+                continue
 
-            # Optional location line (doesn't look like a date/duration or the next job title)
-            if i < len(raw_lines):
-                nxt = raw_lines[i]
-                if not _looks_like_duration(nxt) and len(nxt) < 80:
-                    # Peek ahead: if what follows is a duration, this is a location
-                    if (i + 1 < len(raw_lines) and _looks_like_duration(raw_lines[i + 1])) or \
-                       (i + 1 >= len(raw_lines)):
-                        location = nxt
-                        i += 1
+            # Company header followed by a company-level duration.
+            if (
+                index + 1 < len(raw_lines)
+                and is_company_duration(raw_lines[index + 1])
+                and not is_date(raw_lines[index + 1])
+            ):
+                current_company = line
+                company_duration = raw_lines[index + 1].strip()
+                index += 2
+                continue
 
-            # Skip any remaining description lines until next "title" candidate
-            # (We skip long description text — it's rarely structured)
-            while i < len(raw_lines):
-                nxt = raw_lines[i]
-                if _looks_like_duration(nxt):
-                    i += 1  # skip stray duration lines
+            # Standard single-company experience:
+            # title -> company -> duration
+            if (
+                index + 2 < len(raw_lines)
+                and not is_date(raw_lines[index])
+                and not is_date(raw_lines[index + 1])
+                and is_date(raw_lines[index + 2])
+            ):
+                title = raw_lines[index].strip()
+                company = raw_lines[index + 1].strip()
+                duration = raw_lines[index + 2].strip()
+
+                if not title.lower().startswith('skills:') and \
+                not company.lower().startswith('skills:'):
+                    entries.append({
+                        'title': title,
+                        'company': company,
+                        'duration': duration,
+                        'location': '',
+                    })
+
+                index += 3
+                continue
+
+            # Multiple roles under the current company:
+            # title -> duration
+            if current_company and index + 1 < len(raw_lines):
+                title = line
+                duration = raw_lines[index + 1].strip()
+
+                if is_date(duration) and not title.lower().startswith('skills:'):
+                    entries.append({
+                        'title': title,
+                        'company': current_company,
+                        'duration': duration or company_duration,
+                        'location': '',
+                    })
+                    index += 2
                     continue
-                # If next line could be a new job title (short, not a duration), stop
-                if len(nxt) < 120 and not _looks_like_duration(nxt):
-                    break
-                i += 1  # skip long description text
 
-            if title:
-                entries.append({
-                    'title': title,
-                    'company': company,
-                    'duration': duration,
-                    'location': location,
-                })
+            index += 1
 
-        return entries
+        return entries[:max_entries]
 
     def _parse_education(self, text: str, max_entries: int = 15) -> List[Dict]:
         """
