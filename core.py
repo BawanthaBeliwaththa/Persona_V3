@@ -498,8 +498,6 @@ def _looks_like_proficiency(line: str) -> bool:
     lower = line.strip().lower()
     return any(kw in lower for kw in _PROFICIENCY_KW)
 
-
-
 # Core LinkedIn Scraper Class
 class LinkedInScraper:
     def __init__(self, headless: bool = False, browser_type: str = "chromium", session_name: str = "default"):
@@ -743,7 +741,7 @@ class LinkedInScraper:
             if 'feed' in base_url and 'login' not in base_url and 'checkpoint' not in base_url:
                 self.is_authenticated = True
                 return True
-            
+
             await self.page.goto('https://www.linkedin.com/feed/', wait_until='domcontentloaded', timeout=15000)
             await asyncio.sleep(1)
             base_url = self.page.url.split('?')[0].rstrip('/')
@@ -773,7 +771,7 @@ class LinkedInScraper:
             has_premium_icon = await self.page.evaluate('''() => {
                 return !!document.querySelector('li-icon[type="premium-brand"], svg.premium-icon, svg[data-supported-dps="24x24_premium_icon"]');
             }''')
-            
+
             # If we explicitly see "Try Premium for free", it's false.
             if is_free:
                 return False
@@ -793,16 +791,16 @@ class LinkedInScraper:
         keyword = email if email else phone
         if not keyword:
             return []
-            
+
         search_url = f"https://www.linkedin.com/search/results/people/?keywords={keyword}"
         await self.page.goto(search_url, wait_until='domcontentloaded', timeout=30000)
         await asyncio.sleep(3)
-        
+
         # Scroll to load results
         for _ in range(5):
             await self.page.evaluate('window.scrollBy(0, 500)')
             await asyncio.sleep(0.5)
-            
+
         results = await self.page.evaluate('''() => {
             const items = document.querySelectorAll('li.reusable-search__result-container');
             const data = [];
@@ -839,7 +837,7 @@ class LinkedInScraper:
             cookie_val = str(li_at).strip()
             if 'li_at=' in cookie_val:
                 cookie_val = cookie_val.split('li_at=')[1].split(';')[0].strip()
-            
+
             domain_cookies = [
                 {'name': 'li_at', 'value': cookie_val, 'domain': '.www.linkedin.com', 'path': '/'},
                 {'name': 'li_at', 'value': cookie_val, 'domain': '.linkedin.com', 'path': '/'}
@@ -918,7 +916,7 @@ class LinkedInScraper:
         email = email or os.environ.get('LINKEDIN_EMAIL', "uov.agri.faculty@gmail.com")
         password = password or os.environ.get('LINKEDIN_PASSWORD', "Hello@2026")
         li_at_env = li_at or os.environ.get('LINKEDIN_LI_AT') or os.environ.get('LI_AT')
-        
+
         # 1. Try session cookie bypass if li_at cookie is available in env or args
         if li_at_env:
             print("[Login] Attempting session cookie (li_at) bypass...")
@@ -932,7 +930,7 @@ class LinkedInScraper:
         await self.ensure_active_page()
         await self.page.goto('https://www.linkedin.com/login', wait_until='domcontentloaded')
         await asyncio.sleep(2)
-        
+
         base_url = self.page.url.split('?')[0].rstrip('/')
         if 'feed' in base_url and 'login' not in base_url and 'checkpoint' not in base_url:
             self.is_authenticated = True
@@ -972,7 +970,7 @@ class LinkedInScraper:
             elif 'checkpoint' in base_url or 'challenge' in base_url:
                 self.verification_required = True
                 print(f"[Login] Email verification checkpoint detected! URL: {self.page.url}")
-                
+
         base_url = self.page.url.split('?')[0].rstrip('/')
         if 'feed' in base_url and 'login' not in base_url and 'checkpoint' not in base_url:
             self.is_authenticated = True
@@ -983,6 +981,8 @@ class LinkedInScraper:
             print("[Login] Stuck on verification checkpoint. PIN entry or li_at cookie bypass required.")
         print("Login timeout or failed.")
         return False
+
+
 
 
     # ── Core profile extraction ─────────────────────────────────────────────
@@ -1117,6 +1117,7 @@ class LinkedInScraper:
             detail_texts: Dict[str, str] = {}
             contact_info: Dict[str, str] = {}
             
+
             detail_pages = {
                 'experience':      f"{base_url}/details/experience/",
                 'education':       f"{base_url}/details/education/",
@@ -1183,6 +1184,417 @@ class LinkedInScraper:
                         }
                         return "";
                     }''')
+
+
+                    # -------------------------------------------------------------------------------------
+                    # Expirence: if linkdln update it's structure comment this to role back to old code
+                    if section == 'experience':
+
+                        experience_data = await self.page.evaluate('''() => {
+
+                            const results = [];
+
+                            const experienceBlocks = document.querySelectorAll(
+                                '[componentkey^="entity-collection-item-"]'
+                            );
+
+                            // Helper: detect date lines
+                            const isDateLine = (text) => {
+
+                                return /(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\\s+\\d{4}\\s*-\\s*(?:Present|(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\\s+\\d{4})/i.test(
+                                    text
+                                );
+                            };
+
+                            // Helper: detect duration-only lines
+                            const isDurationOnly = (text) => {
+
+                                return /^(?:(?:\\d+\\s+yrs?|\\d+\\s+yr)(?:\\s+\\d+\\s+mos?)?|\\d+\\s+mos?)$/i.test(
+                                    text.trim()
+                                );
+                            };
+
+                            // Helper: clean element text
+
+                            const getText = (el) => {
+
+                                if (!el) {
+                                    return '';
+                                }
+
+                                return (el.innerText || '')
+                                    .replace(/\\s+/g, ' ')
+                                    .trim();
+                            };
+
+                            // Helper: check whether paragraph should be ignored
+                            const shouldIgnoreParagraph = (p) => {
+
+                                // Ignore expandable descriptions
+
+                                if (
+                                    p.querySelector(
+                                        '[data-testid="expandable-text-box"]'
+                                    )
+                                ) {
+                                    return true;
+                                }
+
+
+                                // Ignore Skills section
+
+                                const strongElements = Array.from(
+                                    p.querySelectorAll('strong')
+                                );
+
+                                const hasSkillsLabel = strongElements.some(strong => {
+
+                                    const text = (strong.innerText || '')
+                                        .trim()
+                                        .toLowerCase();
+
+                                    return text === 'skills:';
+                                });
+
+
+                                if (hasSkillsLabel) {
+                                    return true;
+                                }
+
+
+                                return false;
+                            };
+
+
+
+                            // Process every experience block
+                            for (const block of experienceBlocks) {
+
+                                // Check whether this company has multiple roles
+                                const roleList = block.querySelector('ul');
+
+                                // MULTIPLE POSITIONS UNDER SAME COMPANY
+                                if (roleList) {
+
+                                    let company = '';
+                                    let groupLocation = '';
+
+
+                                    // Get company-level paragraphs
+                                    //
+                                    // IMPORTANT:
+                                    // Ignore anything inside <ul> because those paragraphs
+                                    // belong to individual roles.
+                                    const headerParagraphs = Array.from(
+                                        block.querySelectorAll('p')
+                                    ).filter(p => {
+
+                                        // Ignore paragraphs belonging to roles
+                                        if (p.closest('ul')) {
+                                            return false;
+                                        }
+
+
+                                        // Ignore description / skills
+                                        if (shouldIgnoreParagraph(p)) {
+                                            return false;
+                                        }
+
+
+                                        return true;
+                                    });
+
+
+                                    const headerLines = headerParagraphs
+                                        .map(getText)
+                                        .filter(Boolean);
+
+                                    // Get company name
+                                    if (headerLines.length > 0) {
+
+                                        company = headerLines[0];
+                                    }
+
+
+                                    // Fallback company detection using logo
+                                    if (!company) {
+
+                                        const logo = block.querySelector(
+                                            'svg[aria-label$=" logo"], img[alt$=" logo"]'
+                                        );
+
+
+                                        if (logo) {
+
+                                            const label =
+                                                logo.getAttribute('aria-label') ||
+                                                logo.getAttribute('alt') ||
+                                                '';
+
+
+                                            company = label
+                                                .replace(/\\s+logo$/i, '')
+                                                .trim();
+                                        }
+                                    }
+
+
+
+                                    // Find company/group location
+                                    const directTexts = headerLines.slice(1);
+
+
+                                    for (const line of directTexts) {
+
+                                        // Ignore employment type / overall employment info
+
+                                        if (
+                                            /\\b(?:full-time|part-time|contract|internship|freelance|self-employed|temporary|apprenticeship|seasonal)\\b/i.test(
+                                                line
+                                            )
+                                        ) {
+                                            continue;
+                                        }
+
+                                        // Ignore date lines
+                                        if (isDateLine(line)) {
+                                            continue;
+                                        }
+
+
+                                        // Ignore duration-only values
+                                        if (isDurationOnly(line)) {
+                                            continue;
+                                        }
+
+                                        // Remaining value can be company location
+                                        groupLocation = line;
+                                    }
+
+
+                                    // Extract individual roles
+                                    const roles = roleList.querySelectorAll(
+                                        ':scope > li'
+                                    );
+
+
+                                    for (const role of roles) {
+
+                                        // Get role paragraphs
+                                        const paragraphs = Array.from(
+                                            role.querySelectorAll('p')
+                                        ).filter(p => {
+
+
+                                            // Ignore expandable description / Skills
+                                            if (shouldIgnoreParagraph(p)) {
+                                                return false;
+                                            }
+
+
+                                            return true;
+                                        });
+
+
+                                        const lines = paragraphs
+                                            .map(getText)
+                                            .filter(Boolean);
+
+
+                                        let title = '';
+                                        let duration = '';
+                                        let location = '';
+
+
+                                        // Parse role
+                                        for (const line of lines) {
+
+                                            // Date / duration
+                                            if (isDateLine(line)) {
+
+                                                if (!duration) {
+
+                                                    duration = line;
+                                                }
+
+                                                continue;
+                                            }
+
+
+                                            // Ignore duration-only values
+                                            if (isDurationOnly(line)) {
+
+                                                continue;
+                                            }
+
+
+                                            // First normal line = title
+                                            if (!title) {
+
+                                                title = line;
+
+                                                continue;
+                                            }
+
+
+                                            // After title + duration = role location
+
+
+                                            if (
+                                                duration &&
+                                                !location
+                                            ) {
+
+                                                location = line;
+                                            }
+                                        }
+
+
+                                        // Add role
+                                        //
+                                        // If role doesn't have its own location,
+                                        // use company/group location.
+
+                                        if (title) {
+
+                                            results.push({
+
+                                                title: title,
+
+                                                company: company,
+
+                                                duration: duration,
+
+                                                location: location || groupLocation
+                                            });
+                                        }
+                                    }
+
+
+                                    // Finished this grouped experience
+                                    continue;
+                                }
+
+
+
+                                // NORMAL SINGLE EXPERIENCE
+
+                                const paragraphs = Array.from(
+                                    block.querySelectorAll('p')
+                                ).filter(p => {
+
+
+                                    // Ignore description / Skills
+                                    if (shouldIgnoreParagraph(p)) {
+
+                                        return false;
+                                    }
+
+
+                                    return true;
+                                });
+
+
+                                const lines = paragraphs
+                                    .map(getText)
+                                    .filter(Boolean);
+
+
+                                let title = '';
+                                let company = '';
+                                let duration = '';
+                                let location = '';
+
+
+ 
+                                // Parse normal single experience
+
+                                for (const line of lines) {
+
+
+                                    // Date / duration
+
+                                    if (isDateLine(line)) {
+
+                                        if (!duration) {
+
+                                            duration = line;
+                                        }
+
+                                        continue;
+                                    }
+
+
+
+                                    // Ignore duration-only values
+
+                                    if (isDurationOnly(line)) {
+
+                                        continue;
+                                    }
+
+
+
+                                    // First normal line = title
+                                      if (!title) {
+
+                                        title = line;
+
+                                        continue;
+                                    }
+
+
+
+                                    // Second normal line = company
+
+                                    if (!company) {
+
+                                        company = line;
+
+                                        continue;
+                                    }
+
+
+                                    // Text after duration = location
+
+                                    if (
+                                        duration &&
+                                        !location
+                                    ) {
+
+                                        location = line;
+                                    }
+                                }
+
+
+
+                                if (title) {
+
+                                    results.push({
+
+                                        title: title,
+
+                                        company: company,
+
+                                        duration: duration,
+
+                                        location: location
+                                    });
+                                }
+                            }
+
+
+                            return results;
+
+                        }''')
+
+                        if experience_data:
+                            global experience_list
+                            experience_list = experience_data
+                    # -------------------------------------------------------------------------------------
+
+
+                    
                     if section == 'contact_info':
                         contact_data = await self.page.evaluate('''() => {
                             const data = {};
@@ -1214,6 +1626,7 @@ class LinkedInScraper:
                 about = self._parse_about(clean_main)
 
             exp_text   = detail_texts.get('experience', '')
+            print("exp_text :" + exp_text)
             edu_text   = detail_texts.get('education', '')
             cert_text  = detail_texts.get('certifications', '')
             skill_text = detail_texts.get('skills', '')
@@ -1223,7 +1636,8 @@ class LinkedInScraper:
             rec_text   = detail_texts.get('recommendations', '')
 
             current_job     = self._parse_experience(exp_text)
-            experience      = self._parse_all_experiences(exp_text)
+            # experience      = self._parse_all_experiences(exp_text) # Expirence: if linkdln update it's structure uncomment this to role back to old code
+            experience      = experience_list # Expirence: if linkdln update it's structure comment this to role back to old code
             qualifications  = self._parse_education(edu_text)
             certifications  = self._parse_certifications(cert_text)
             skills          = self._parse_skills(skill_text)
@@ -1359,153 +1773,102 @@ class LinkedInScraper:
 
     # ── Section parsers ─────────────────────────────────────────────────────
 
+    # Expirence: if linkdln update it's structure comment this to role back to old code
     def _parse_experience(self, text: str) -> Dict:
         """Parse the most-recent (current) job from experience detail text."""
-        entries = self._parse_all_experiences(text)
+        entries = experience_list
         return entries[0] if entries else {}
 
-    def _parse_all_experiences(self, text: str, max_entries: int = 20) -> List[Dict]:
-        """
-        Parse LinkedIn experience entries, including multiple positions per company
+    # Expirence: if linkdln update it's structure uncomment this to role back to old code
+    # def _parse_experience(self, text: str) -> Dict:
+    #     """Parse the most-recent (current) job from experience detail text."""
+    #     entries = self._parse_all_experiences(text)
+    #     return entries[0] if entries else {}
 
-        Strategy: clean lines, find the section start, then group consecutive
-        non-noise lines into entries.  An entry boundary is detected when we
-        see a line that looks like a duration / date range, which always
-        appears before the next title.
-        """
-        if not text:
-            return []
+    # def _parse_all_experiences(self, text: str, max_entries: int = 20) -> List[Dict]:
+    #     """
+    #     Parse all experience entries from detail-page text.
 
-        lines = self._clean_lines(text)
+    #     Strategy: clean lines, find the section start, then group consecutive
+    #     non-noise lines into entries.  An entry boundary is detected when we
+    #     see a line that looks like a duration / date range, which always
+    #     appears before the next title.
+    #     """
+    #     if not text:
+    #         return []
 
-        start = -1
-        for i, line in enumerate(lines):
-            if line.strip() in ('Experience', 'Experiences'):
-                start = i + 1
-                break
+    #     lines = self._clean_lines(text)
+    #     # Find where the Experience section begins
+    #     start = -1
+    #     for i, l in enumerate(lines):
+    #         if l.strip() in ('Experience', 'Experiences'):
+    #             start = i + 1
+    #             break
+    #     if start == -1:
+    #         start = 0
 
-        if start == -1:
-            start = 0
+    #     section_end_markers = {
+    #         'Education', 'Licenses & certifications', 'Skills', 'Interests',
+    #         'Activity', 'Recommendations', 'Honors & awards', 'Languages',
+    #         'Volunteer experience', 'Projects', 'Publications', 'Certifications',
+    #     }
 
-        section_end_markers = {
-            'Education', 'Licenses & certifications', 'Skills', 'Interests',
-            'Activity', 'Recommendations', 'Honors & awards', 'Languages',
-            'Volunteer experience', 'Projects', 'Publications', 'Certifications',
-        }
+    #     raw_lines = []
+    #     for l in lines[start:]:
+    #         if l in section_end_markers:
+    #             break
+    #         raw_lines.append(l)
 
-        raw_lines = []
-        for line in lines[start:]:
-            if line in section_end_markers:
-                break
-            raw_lines.append(line)
+    #     if not raw_lines:
+    #         return []
 
-        company_duration_re = re.compile(
-            r'^\d+\s*(yr|yrs|year|years|mo|mos|month|months)'
-            r'(\s+\d+\s*(yr|yrs|year|years|mo|mos|month|months))?$',
-            re.I
-        )
+    #     # Group into entries — each entry: title, company, duration, location, description
+    #     entries = []
+    #     i = 0
+    #     while i < len(raw_lines) and len(entries) < max_entries:
+    #         title = raw_lines[i]
+    #         i += 1
+    #         company = duration = location = ''
 
-        def is_company_duration(value: str) -> bool:
-            return bool(company_duration_re.match(value.strip()))
+    #         if i < len(raw_lines) and not _looks_like_duration(raw_lines[i]):
+    #             company = raw_lines[i]
+    #             i += 1
 
-        def read_location(index: int):
-            if index >= len(raw_lines):
-                return '', index
+    #         if i < len(raw_lines) and _looks_like_duration(raw_lines[i]):
+    #             duration = raw_lines[i]
+    #             i += 1
 
-            candidate = raw_lines[index]
+    #         # Optional location line (doesn't look like a date/duration or the next job title)
+    #         if i < len(raw_lines):
+    #             nxt = raw_lines[i]
+    #             if not _looks_like_duration(nxt) and len(nxt) < 80:
+    #                 # Peek ahead: if what follows is a duration, this is a location
+    #                 if (i + 1 < len(raw_lines) and _looks_like_duration(raw_lines[i + 1])) or \
+    #                    (i + 1 >= len(raw_lines)):
+    #                     location = nxt
+    #                     i += 1
 
-            # LinkedIn sometimes places role skills after the experience.
-            # They are not a location.
-            if candidate.strip().lower().startswith(('skills:', 'skill:')):
-                return '', index + 1
+    #         # Skip any remaining description lines until next "title" candidate
+    #         # (We skip long description text — it's rarely structured)
+    #         while i < len(raw_lines):
+    #             nxt = raw_lines[i]
+    #             if _looks_like_duration(nxt):
+    #                 i += 1  # skip stray duration lines
+    #                 continue
+    #             # If next line could be a new job title (short, not a duration), stop
+    #             if len(nxt) < 120 and not _looks_like_duration(nxt):
+    #                 break
+    #             i += 1  # skip long description text
 
-            if _looks_like_duration(candidate):
-                return '', index
+    #         if title:
+    #             entries.append({
+    #                 'title': title,
+    #                 'company': company,
+    #                 'duration': duration,
+    #                 'location': location,
+    #             })
 
-            # A following duration usually means candidate is the next title,
-            # not the location of the current position.
-            if index + 1 < len(raw_lines):
-                if _looks_like_duration(raw_lines[index + 1]):
-                    return '', index
-
-            return candidate, index + 1
-
-        entries = []
-        i = 0
-
-        while i < len(raw_lines) and len(entries) < max_entries:
-            # LinkedIn grouped-company format:
-            #
-            # Company
-            # 1 yr 6 mos
-            # Position title
-            # Jan 2024 - Present
-            # Location
-            #
-            if i + 1 < len(raw_lines) and is_company_duration(raw_lines[i + 1]):
-                company = raw_lines[i]
-                company_duration = raw_lines[i + 1]
-                i += 2
-                company_entries = 0
-
-                while i < len(raw_lines) and len(entries) < max_entries:
-                    # A new company starts when it is followed by a company-level duration.
-                    if (
-                        company_entries > 0
-                        and i + 1 < len(raw_lines)
-                        and is_company_duration(raw_lines[i + 1])
-                    ):
-                        break
-
-                    title = raw_lines[i]
-                    i += 1
-
-                    duration = ''
-                    if i < len(raw_lines) and _looks_like_duration(raw_lines[i]):
-                        duration = raw_lines[i]
-                        i += 1
-
-                    location, i = read_location(i)
-
-                    entries.append({
-                        'title': title,
-                        'company': company,
-                        'duration': duration or company_duration,
-                        'location': location,
-                    })
-                    company_entries += 1
-
-                continue
-
-            # Standard single-position format:
-            #
-            # Position title
-            # Company
-            # Jan 2024 - Present
-            # Location
-            title = raw_lines[i]
-            i += 1
-
-            company = ''
-            if i < len(raw_lines) and not _looks_like_duration(raw_lines[i]):
-                company = raw_lines[i]
-                i += 1
-
-            duration = ''
-            if i < len(raw_lines) and _looks_like_duration(raw_lines[i]):
-                duration = raw_lines[i]
-                i += 1
-
-            location, i = read_location(i)
-
-            entries.append({
-                'title': title,
-                'company': company,
-                'duration': duration,
-                'location': location,
-            })
-
-        return entries
+    #     return entries
 
     def _parse_education(self, text: str, max_entries: int = 15) -> List[Dict]:
         """
@@ -2000,11 +2363,11 @@ class LinkedInScraper:
             for r in results:
                 name_lower = r.get('name', '').lower()
                 url_lower = r.get('profile_url', '').lower()
-                
+
                 # Filter out anonymous profiles
                 if not r.get('name') or r.get('name') in ('LinkedIn Member', 'LinkedIn User'):
                     continue
-                    
+
                 # Filter by name keywords if query name is provided
                 if query_words:
                     match = False
@@ -2018,7 +2381,7 @@ class LinkedInScraper:
                         print(f"Skipping unrelated search result: {r.get('name')} ({r.get('profile_url')})")
                         continue
                 filtered_results.append(r)
-                
+
             return filtered_results[:max_results]
         except Exception as e:
             err_msg = str(e)
