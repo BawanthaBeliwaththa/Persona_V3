@@ -498,8 +498,6 @@ def _looks_like_proficiency(line: str) -> bool:
     lower = line.strip().lower()
     return any(kw in lower for kw in _PROFICIENCY_KW)
 
-
-
 # Core LinkedIn Scraper Class
 class LinkedInScraper:
     def __init__(self, headless: bool = False, browser_type: str = "chromium", session_name: str = "default"):
@@ -985,6 +983,8 @@ class LinkedInScraper:
         return False
 
 
+
+
     # ── Core profile extraction ─────────────────────────────────────────────
     async def extract_profile(self, profile_url: str, _retry: int = 0) -> Dict:
         MAX_RETRIES = 2
@@ -1116,6 +1116,7 @@ class LinkedInScraper:
             base_url = profile_url.rstrip('/')
             detail_texts: Dict[str, str] = {}
             contact_info: Dict[str, str] = {}
+            
 
             detail_pages = {
                 'experience':      f"{base_url}/details/experience/",
@@ -1183,6 +1184,417 @@ class LinkedInScraper:
                         }
                         return "";
                     }''')
+
+
+                    # -------------------------------------------------------------------------------------
+                    # Expirence: if linkdln update it's structure comment this to role back to old code
+                    if section == 'experience':
+
+                        experience_data = await self.page.evaluate('''() => {
+
+                            const results = [];
+
+                            const experienceBlocks = document.querySelectorAll(
+                                '[componentkey^="entity-collection-item-"]'
+                            );
+
+                            // Helper: detect date lines
+                            const isDateLine = (text) => {
+
+                                return /(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\\s+\\d{4}\\s*-\\s*(?:Present|(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\\s+\\d{4})/i.test(
+                                    text
+                                );
+                            };
+
+                            // Helper: detect duration-only lines
+                            const isDurationOnly = (text) => {
+
+                                return /^(?:(?:\\d+\\s+yrs?|\\d+\\s+yr)(?:\\s+\\d+\\s+mos?)?|\\d+\\s+mos?)$/i.test(
+                                    text.trim()
+                                );
+                            };
+
+                            // Helper: clean element text
+
+                            const getText = (el) => {
+
+                                if (!el) {
+                                    return '';
+                                }
+
+                                return (el.innerText || '')
+                                    .replace(/\\s+/g, ' ')
+                                    .trim();
+                            };
+
+                            // Helper: check whether paragraph should be ignored
+                            const shouldIgnoreParagraph = (p) => {
+
+                                // Ignore expandable descriptions
+
+                                if (
+                                    p.querySelector(
+                                        '[data-testid="expandable-text-box"]'
+                                    )
+                                ) {
+                                    return true;
+                                }
+
+
+                                // Ignore Skills section
+
+                                const strongElements = Array.from(
+                                    p.querySelectorAll('strong')
+                                );
+
+                                const hasSkillsLabel = strongElements.some(strong => {
+
+                                    const text = (strong.innerText || '')
+                                        .trim()
+                                        .toLowerCase();
+
+                                    return text === 'skills:';
+                                });
+
+
+                                if (hasSkillsLabel) {
+                                    return true;
+                                }
+
+
+                                return false;
+                            };
+
+
+
+                            // Process every experience block
+                            for (const block of experienceBlocks) {
+
+                                // Check whether this company has multiple roles
+                                const roleList = block.querySelector('ul');
+
+                                // MULTIPLE POSITIONS UNDER SAME COMPANY
+                                if (roleList) {
+
+                                    let company = '';
+                                    let groupLocation = '';
+
+
+                                    // Get company-level paragraphs
+                                    //
+                                    // IMPORTANT:
+                                    // Ignore anything inside <ul> because those paragraphs
+                                    // belong to individual roles.
+                                    const headerParagraphs = Array.from(
+                                        block.querySelectorAll('p')
+                                    ).filter(p => {
+
+                                        // Ignore paragraphs belonging to roles
+                                        if (p.closest('ul')) {
+                                            return false;
+                                        }
+
+
+                                        // Ignore description / skills
+                                        if (shouldIgnoreParagraph(p)) {
+                                            return false;
+                                        }
+
+
+                                        return true;
+                                    });
+
+
+                                    const headerLines = headerParagraphs
+                                        .map(getText)
+                                        .filter(Boolean);
+
+                                    // Get company name
+                                    if (headerLines.length > 0) {
+
+                                        company = headerLines[0];
+                                    }
+
+
+                                    // Fallback company detection using logo
+                                    if (!company) {
+
+                                        const logo = block.querySelector(
+                                            'svg[aria-label$=" logo"], img[alt$=" logo"]'
+                                        );
+
+
+                                        if (logo) {
+
+                                            const label =
+                                                logo.getAttribute('aria-label') ||
+                                                logo.getAttribute('alt') ||
+                                                '';
+
+
+                                            company = label
+                                                .replace(/\\s+logo$/i, '')
+                                                .trim();
+                                        }
+                                    }
+
+
+
+                                    // Find company/group location
+                                    const directTexts = headerLines.slice(1);
+
+
+                                    for (const line of directTexts) {
+
+                                        // Ignore employment type / overall employment info
+
+                                        if (
+                                            /\\b(?:full-time|part-time|contract|internship|freelance|self-employed|temporary|apprenticeship|seasonal)\\b/i.test(
+                                                line
+                                            )
+                                        ) {
+                                            continue;
+                                        }
+
+                                        // Ignore date lines
+                                        if (isDateLine(line)) {
+                                            continue;
+                                        }
+
+
+                                        // Ignore duration-only values
+                                        if (isDurationOnly(line)) {
+                                            continue;
+                                        }
+
+                                        // Remaining value can be company location
+                                        groupLocation = line;
+                                    }
+
+
+                                    // Extract individual roles
+                                    const roles = roleList.querySelectorAll(
+                                        ':scope > li'
+                                    );
+
+
+                                    for (const role of roles) {
+
+                                        // Get role paragraphs
+                                        const paragraphs = Array.from(
+                                            role.querySelectorAll('p')
+                                        ).filter(p => {
+
+
+                                            // Ignore expandable description / Skills
+                                            if (shouldIgnoreParagraph(p)) {
+                                                return false;
+                                            }
+
+
+                                            return true;
+                                        });
+
+
+                                        const lines = paragraphs
+                                            .map(getText)
+                                            .filter(Boolean);
+
+
+                                        let title = '';
+                                        let duration = '';
+                                        let location = '';
+
+
+                                        // Parse role
+                                        for (const line of lines) {
+
+                                            // Date / duration
+                                            if (isDateLine(line)) {
+
+                                                if (!duration) {
+
+                                                    duration = line;
+                                                }
+
+                                                continue;
+                                            }
+
+
+                                            // Ignore duration-only values
+                                            if (isDurationOnly(line)) {
+
+                                                continue;
+                                            }
+
+
+                                            // First normal line = title
+                                            if (!title) {
+
+                                                title = line;
+
+                                                continue;
+                                            }
+
+
+                                            // After title + duration = role location
+
+
+                                            if (
+                                                duration &&
+                                                !location
+                                            ) {
+
+                                                location = line;
+                                            }
+                                        }
+
+
+                                        // Add role
+                                        //
+                                        // If role doesn't have its own location,
+                                        // use company/group location.
+
+                                        if (title) {
+
+                                            results.push({
+
+                                                title: title,
+
+                                                company: company,
+
+                                                duration: duration,
+
+                                                location: location || groupLocation
+                                            });
+                                        }
+                                    }
+
+
+                                    // Finished this grouped experience
+                                    continue;
+                                }
+
+
+
+                                // NORMAL SINGLE EXPERIENCE
+
+                                const paragraphs = Array.from(
+                                    block.querySelectorAll('p')
+                                ).filter(p => {
+
+
+                                    // Ignore description / Skills
+                                    if (shouldIgnoreParagraph(p)) {
+
+                                        return false;
+                                    }
+
+
+                                    return true;
+                                });
+
+
+                                const lines = paragraphs
+                                    .map(getText)
+                                    .filter(Boolean);
+
+
+                                let title = '';
+                                let company = '';
+                                let duration = '';
+                                let location = '';
+
+
+ 
+                                // Parse normal single experience
+
+                                for (const line of lines) {
+
+
+                                    // Date / duration
+
+                                    if (isDateLine(line)) {
+
+                                        if (!duration) {
+
+                                            duration = line;
+                                        }
+
+                                        continue;
+                                    }
+
+
+
+                                    // Ignore duration-only values
+
+                                    if (isDurationOnly(line)) {
+
+                                        continue;
+                                    }
+
+
+
+                                    // First normal line = title
+                                      if (!title) {
+
+                                        title = line;
+
+                                        continue;
+                                    }
+
+
+
+                                    // Second normal line = company
+
+                                    if (!company) {
+
+                                        company = line;
+
+                                        continue;
+                                    }
+
+
+                                    // Text after duration = location
+
+                                    if (
+                                        duration &&
+                                        !location
+                                    ) {
+
+                                        location = line;
+                                    }
+                                }
+
+
+
+                                if (title) {
+
+                                    results.push({
+
+                                        title: title,
+
+                                        company: company,
+
+                                        duration: duration,
+
+                                        location: location
+                                    });
+                                }
+                            }
+
+
+                            return results;
+
+                        }''')
+
+                        if experience_data:
+                            global experience_list
+                            experience_list = experience_data
+                    # -------------------------------------------------------------------------------------
+
+
+                    
                     if section == 'contact_info':
                         contact_data = await self.page.evaluate('''() => {
                             const data = {};
@@ -1214,6 +1626,7 @@ class LinkedInScraper:
                 about = self._parse_about(clean_main)
 
             exp_text   = detail_texts.get('experience', '')
+            print("exp_text :" + exp_text)
             edu_text   = detail_texts.get('education', '')
             cert_text  = detail_texts.get('certifications', '')
             skill_text = detail_texts.get('skills', '')
@@ -1223,7 +1636,8 @@ class LinkedInScraper:
             rec_text   = detail_texts.get('recommendations', '')
 
             current_job     = self._parse_experience(exp_text)
-            experience      = self._parse_all_experiences(exp_text)
+            # experience      = self._parse_all_experiences(exp_text) # Expirence: if linkdln update it's structure uncomment this to role back to old code
+            experience      = experience_list # Expirence: if linkdln update it's structure comment this to role back to old code
             qualifications  = self._parse_education(edu_text)
             certifications  = self._parse_certifications(cert_text)
             skills          = self._parse_skills(skill_text)
@@ -1359,10 +1773,17 @@ class LinkedInScraper:
 
     # ── Section parsers ─────────────────────────────────────────────────────
 
+    # Expirence: if linkdln update it's structure comment this to role back to old code
     def _parse_experience(self, text: str) -> Dict:
         """Parse the most-recent (current) job from experience detail text."""
-        entries = self._parse_all_experiences(text)
+        entries = experience_list
         return entries[0] if entries else {}
+
+    # Expirence: if linkdln update it's structure uncomment this to role back to old code
+    # def _parse_experience(self, text: str) -> Dict:
+    #     """Parse the most-recent (current) job from experience detail text."""
+    #     entries = self._parse_all_experiences(text)
+    #     return entries[0] if entries else {}
 
     # def _parse_all_experiences(self, text: str, max_entries: int = 20) -> List[Dict]:
     #     """
@@ -1448,150 +1869,6 @@ class LinkedInScraper:
     #             })
 
     #     return entries
-
-
-    def _parse_all_experiences(self, text: str, max_entries: int = 20) -> List[Dict]:
-        """
-        Parse LinkedIn experience text.
-
-        Output structure is always:
-        {
-            'title': '',
-            'company': '',
-            'duration': '',
-            'location': ''
-        }
-        """
-        if not text:
-            return []
-
-        lines = self._clean_lines(text)
-
-        start = 0
-        for index, line in enumerate(lines):
-            if line.strip() in ('Experience', 'Experiences'):
-                start = index + 1
-                break
-
-        section_end_markers = {
-            'Education',
-            'Licenses & certifications',
-            'Skills',
-            'Interests',
-            'Activity',
-            'Recommendations',
-            'Honors & awards',
-            'Languages',
-            'Volunteer experience',
-            'Projects',
-            'Publications',
-            'Certifications',
-        }
-
-        raw_lines = []
-        for line in lines[start:]:
-            if line in section_end_markers:
-                break
-            if line.lower().startswith('skills:'):
-                continue
-            raw_lines.append(line)
-
-        if not raw_lines:
-            return []
-
-        date_pattern = re.compile(
-            r'^(?:'
-            r'(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)'
-            r'\s+\d{4}\s*-\s*'
-            r'(?:Present|Current|Now|'
-            r'(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{4})'
-            r'(?:\s*·.*)?'
-            r'|'
-            r'\d{4}\s*-\s*(?:Present|Current|Now|\d{4})'
-            r'(?:\s*·.*)?'
-            r')$',
-            re.IGNORECASE,
-        )
-
-        company_duration_pattern = re.compile(
-            r'^(?:(?:Full-time|Part-time|Contract|Freelance|Self-employed)'
-            r'\s*·\s*)?\d+\s+(?:yr|yrs|year|years|mo|mos|month|months)'
-            r'(?:\s+\d+\s+(?:yr|yrs|year|years|mo|mos|month|months))?$',
-            re.IGNORECASE,
-        )
-
-        def is_date(value: str) -> bool:
-            return bool(date_pattern.match(value.strip()))
-
-        def is_company_duration(value: str) -> bool:
-            return bool(company_duration_pattern.match(value.strip()))
-
-        entries = []
-        index = 0
-        current_company = ''
-        company_duration = ''
-
-        while index < len(raw_lines) and len(entries) < max_entries:
-            line = raw_lines[index].strip()
-
-            if not line or line.lower().startswith('skills:'):
-                index += 1
-                continue
-
-            # Company header followed by a company-level duration.
-            if (
-                index + 1 < len(raw_lines)
-                and is_company_duration(raw_lines[index + 1])
-                and not is_date(raw_lines[index + 1])
-            ):
-                current_company = line
-                company_duration = raw_lines[index + 1].strip()
-                index += 2
-                continue
-
-            # Standard single-company experience:
-            # title -> company -> duration
-            if (
-                index + 2 < len(raw_lines)
-                and not is_date(raw_lines[index])
-                and not is_date(raw_lines[index + 1])
-                and is_date(raw_lines[index + 2])
-            ):
-                title = raw_lines[index].strip()
-                company = raw_lines[index + 1].strip()
-                duration = raw_lines[index + 2].strip()
-
-                if not title.lower().startswith('skills:') and \
-                not company.lower().startswith('skills:'):
-                    entries.append({
-                        'title': title,
-                        'company': company,
-                        'duration': duration,
-                        'location': '',
-                    })
-
-                index += 3
-                continue
-
-            # Multiple roles under the current company:
-            # title -> duration
-            if current_company and index + 1 < len(raw_lines):
-                title = line
-                duration = raw_lines[index + 1].strip()
-
-                if is_date(duration) and not title.lower().startswith('skills:'):
-                    entries.append({
-                        'title': title,
-                        'company': current_company,
-                        'duration': duration or company_duration,
-                        'location': '',
-                    })
-                    index += 2
-                    continue
-
-            index += 1
-
-        return entries[:max_entries]
 
     def _parse_education(self, text: str, max_entries: int = 15) -> List[Dict]:
         """
