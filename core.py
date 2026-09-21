@@ -1626,7 +1626,6 @@ class LinkedInScraper:
                 about = self._parse_about(clean_main)
 
             exp_text   = detail_texts.get('experience', '')
-            print("exp_text :" + exp_text)
             edu_text   = detail_texts.get('education', '')
             cert_text  = detail_texts.get('certifications', '')
             skill_text = detail_texts.get('skills', '')
