@@ -1930,7 +1930,13 @@ class LinkedInScraper:
         if not text:
             return []
 
+
         lines = self._clean_lines(text)
+        # Ignore Skills:
+        lines = [
+            line for line in lines
+            if not line.strip().lower().startswith('skills:')
+        ]
         start = -1
         for i, l in enumerate(lines):
             if l in ('Licenses & certifications', 'Licenses and certifications', 'Certifications'):
