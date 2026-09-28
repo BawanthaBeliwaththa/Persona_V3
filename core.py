@@ -2031,7 +2031,7 @@ class LinkedInScraper:
             # volunteer       = self._parse_volunteer(vol_text)
             volunteer       = volunteer_list
             honors          = self._parse_honors(hon_text)
-            recommendations = self._parse_recommendations(rec_text)
+            # recommendations = self._parse_recommendations(rec_text)
             recommendations = recommendations_list
 
             connections = raw.get('connections', '')
