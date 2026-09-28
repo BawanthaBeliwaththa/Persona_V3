@@ -1588,13 +1588,418 @@ class LinkedInScraper:
 
                         }''')
 
-                        if experience_data:
-                            global experience_list
-                            experience_list = experience_data
+                        global experience_list
+                        experience_list = experience_data
+                        # if experience_data:
+                        #     global experience_list
+                        #     experience_list = experience_data
                     # -------------------------------------------------------------------------------------
 
 
-                    
+                    # -------------------------------------------------------------------------------------
+                    # Volunteer Experience: if LinkedIn updates its structure, comment this to roll back
+                    # to the old parsing code
+                    if section == 'volunteer':
+
+                        volunteer_data = await self.page.evaluate('''() => {
+
+                            const results = [];
+
+                            // Get all volunteer experience blocks
+                            const volunteerBlocks = document.querySelectorAll(
+                                '[componentkey^="entity-collection-item-"]'
+                            );
+
+
+                            // Helper: clean element text
+                            const getText = (el) => {
+
+                                if (!el) {
+                                    return '';
+                                }
+
+                                return (el.innerText || '')
+                                    .replace(/\\s+/g, ' ')
+                                    .trim();
+                            };
+
+
+                            // Helper: detect volunteer duration
+                            //
+                            // Examples:
+                            // 2017 – 2018
+                            // 2015 - 2018
+                            // Jan 2024 – Present
+                            // Jan 2024 - Dec 2025
+                            const isDuration = (text) => {
+
+                                const value = text.trim();
+
+                                return (
+                                    /^\\d{4}\\s*[–—-]\\s*(?:\\d{4}|Present)$/i.test(value) ||
+                                    /^(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\\s+\\d{4}\\s*[–—-]\\s*(?:Present|(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\\s+\\d{4})$/i.test(value)
+                                );
+                            };
+
+
+                            // Process every volunteer block
+                            for (const block of volunteerBlocks) {
+
+
+                                // Ignore expandable description paragraphs completely
+                                //
+                                // Example:
+                                // <span data-testid="expandable-text-box">
+                                //     SAIFA - Students' Association...
+                                // </span>
+
+                                const paragraphs = Array.from(
+                                    block.querySelectorAll('p')
+                                ).filter(p => {
+
+                                    if (
+                                        p.querySelector(
+                                            '[data-testid="expandable-text-box"]'
+                                        )
+                                    ) {
+                                        return false;
+                                    }
+
+                                    return true;
+                                });
+
+
+                                const lines = paragraphs
+                                    .map(getText)
+                                    .filter(Boolean);
+
+
+                                let role = '';
+                                let organization = '';
+                                let duration = '';
+
+
+                                // ---------------------------------------------------------
+                                // Expected LinkedIn structure:
+                                //
+                                // President
+                                // SAIFA-University
+                                // 2017 – 2018
+                                // Science and Technology   <-- ignored
+                                //
+                                // We only need:
+                                // role
+                                // organization
+                                // duration
+                                // ---------------------------------------------------------
+
+                                for (const line of lines) {
+
+
+                                    // Find duration
+                                    if (isDuration(line)) {
+
+                                        if (!duration) {
+                                            duration = line;
+                                        }
+
+                                        continue;
+                                    }
+
+
+                                    // First text before duration = role
+                                    if (!role) {
+
+                                        role = line;
+
+                                        continue;
+                                    }
+
+
+                                    // Second text before duration = organization
+                                    if (!organization && !duration) {
+
+                                        organization = line;
+
+                                        continue;
+                                    }
+
+
+                                    // Everything after duration is ignored.
+                                    //
+                                    // This automatically ignores volunteer causes:
+                                    //
+                                    // Science and Technology
+                                    // Arts and Culture
+                                    // Education
+                                    // Health
+                                    // etc.
+                                }
+
+
+                                // Only add valid volunteer entries
+                                if (role) {
+
+                                    results.push({
+
+                                        role: role,
+
+                                        organization: organization,
+
+                                        duration: duration
+                                    });
+                                }
+                            }
+
+
+                            return results;
+
+                        }''')
+
+
+                        global volunteer_list
+                        volunteer_list = volunteer_data
+                        # if volunteer_data:
+                        #     global volunteer_list
+                        #     volunteer_list = volunteer_data
+                            # print(volunteer_list)
+
+                    # -------------------------------------------------------------------------------------
+
+                    # -------------------------------------------------------------------------------------
+                    # Recommendations: if LinkedIn updates its structure, comment this to roll back
+                    # to the old parsing code
+                    if section == 'recommendations':
+
+                        recommendations_data = await self.page.evaluate('''() => {
+
+                            const results = [];
+
+
+                            // Helper: clean text
+                            const getText = (el) => {
+
+                                if (!el) {
+                                    return '';
+                                }
+
+                                return (el.innerText || '')
+                                    .replace(/\\s+/g, ' ')
+                                    .replace(/…\\s*more\\s*$/i, '')
+                                    .trim();
+                            };
+
+
+                            // -------------------------------------------------------------
+                            // Only process the currently selected "Received" tab
+                            // -------------------------------------------------------------
+
+                            const receivedTab = Array.from(
+                                document.querySelectorAll('[role="radio"]')
+                            ).find(el => {
+
+                                const label = el.querySelector('label');
+
+                                return (
+                                    label &&
+                                    getText(label).toLowerCase() === 'received'
+                                );
+                            });
+
+
+                            // Do not extract if Received is not selected
+                            if (
+                                receivedTab &&
+                                receivedTab.getAttribute('aria-checked') !== 'true'
+                            ) {
+                                return results;
+                            }
+
+
+                            // -------------------------------------------------------------
+                            // Each recommendation has one recommendation-text element.
+                            // Use that element to find the recommendation container.
+                            // -------------------------------------------------------------
+
+                            const recommendationTexts = document.querySelectorAll(
+                                '[data-testid="expandable-text-box"]'
+                            );
+
+
+                            for (const textElement of recommendationTexts) {
+
+                                let container = textElement.parentElement;
+
+
+                                // Walk upward until we find a container that contains
+                                // exactly one recommendation text and a LinkedIn profile link.
+                                while (container) {
+
+                                    const profileLink = container.querySelector(
+                                        'a[href*="linkedin.com/in/"], a[href^="/in/"]'
+                                    );
+
+                                    const textBoxes = container.querySelectorAll(
+                                        '[data-testid="expandable-text-box"]'
+                                    );
+
+
+                                    if (
+                                        profileLink &&
+                                        textBoxes.length === 1
+                                    ) {
+                                        break;
+                                    }
+
+
+                                    container = container.parentElement;
+                                }
+
+
+                                if (!container) {
+                                    continue;
+                                }
+
+
+                                // ---------------------------------------------------------
+                                // Recommender name
+                                // ---------------------------------------------------------
+
+                                const profileLinks = Array.from(
+                                    container.querySelectorAll(
+                                        'a[href*="linkedin.com/in/"], a[href^="/in/"]'
+                                    )
+                                );
+
+
+                                let recommender = '';
+
+
+                                for (const link of profileLinks) {
+
+                                    const value = getText(link);
+
+                                    if (
+                                        value &&
+                                        !value.startsWith('http')
+                                    ) {
+                                        recommender = value;
+                                        break;
+                                    }
+                                }
+
+
+                                // ---------------------------------------------------------
+                                // Get normal paragraphs
+                                // ---------------------------------------------------------
+
+                                const paragraphs = Array.from(
+                                    container.querySelectorAll('p')
+                                ).filter(p => {
+
+                                    // Recommendation text is handled separately
+                                    if (
+                                        p.querySelector(
+                                            '[data-testid="expandable-text-box"]'
+                                        )
+                                    ) {
+                                        return false;
+                                    }
+
+                                    return true;
+                                });
+
+
+                                const lines = paragraphs
+                                    .map(getText)
+                                    .filter(Boolean);
+
+
+                                let title = '';
+
+
+                                // ---------------------------------------------------------
+                                // Find recommender title/headline
+                                //
+                                // Example:
+                                //
+                                // Shehan Bartholomeusz
+                                // · 3rd+
+                                // Software Engineer                 <-- title
+                                // September 4, 2025, Shehan...      <-- relationship
+                                // ---------------------------------------------------------
+
+                                for (const line of lines) {
+
+                                    // Ignore recommender name
+                                    if (line === recommender) {
+                                        continue;
+                                    }
+
+
+                                    // Ignore LinkedIn connection degree
+                                    if (
+                                        /^·?\\s*(?:1st|2nd|3rd\\+?)$/i.test(line)
+                                    ) {
+                                        continue;
+                                    }
+
+
+                                    // Ignore recommendation relationship/date line
+                                    if (
+                                        /^(?:January|February|March|April|May|June|July|August|September|October|November|December)\\s+\\d{1,2},\\s+\\d{4},/i.test(line)
+                                    ) {
+                                        continue;
+                                    }
+
+
+                                    // First remaining line is the title/headline
+                                    if (!title) {
+
+                                        title = line;
+                                    }
+                                }
+
+
+                                // ---------------------------------------------------------
+                                // Recommendation text
+                                // ---------------------------------------------------------
+
+                                const recText = getText(textElement);
+
+
+                                // ---------------------------------------------------------
+                                // Add recommendation
+                                // ---------------------------------------------------------
+
+                                if (recommender && recText) {
+
+                                    results.push({
+
+                                        recommender: recommender,
+
+                                        title: title,
+
+                                        text: recText
+                                    });
+                                }
+                            }
+
+
+                            return results;
+
+                        }''')
+
+
+                        global recommendations_list
+                        recommendations_list = recommendations_data
+                        # if recommendations_data:
+                        #     global recommendations_list
+                        #     recommendations_list = recommendations_data
+                        # else:
+                        #     recommendations_list = []
+
+                    # -------------------------------------------------------------------------------------
                     if section == 'contact_info':
                         contact_data = await self.page.evaluate('''() => {
                             const data = {};
@@ -1641,9 +2046,11 @@ class LinkedInScraper:
             certifications  = self._parse_certifications(cert_text)
             skills          = self._parse_skills(skill_text)
             languages       = self._parse_languages(lang_text)
-            volunteer       = self._parse_volunteer(vol_text)
+            # volunteer       = self._parse_volunteer(vol_text)
+            volunteer       = volunteer_list
             honors          = self._parse_honors(hon_text)
-            recommendations = self._parse_recommendations(rec_text)
+            # recommendations = self._parse_recommendations(rec_text)
+            recommendations = recommendations_list
 
             connections = raw.get('connections', '')
 
@@ -2115,6 +2522,33 @@ class LinkedInScraper:
             if l in section_end_markers:
                 break
             raw_lines.append(l)
+
+
+        # update if there is any cause
+        volunteer_causes = {
+            'Animal Welfare',
+            'Arts and Culture',
+            'Children',
+            'Civil Rights and Social Action',
+            'Economic Empowerment',
+            'Education',
+            'Environment',
+            'Health',
+            'Human Rights',
+            'Disaster and Humanitarian Relief',
+            'Politics',
+            'Poverty Alleviation',
+            'Science and Technology',
+            'Social Services',
+            'Veteran Support',
+        }
+
+        # Remove volunteer cause lines
+        raw_lines = [
+            line for line in raw_lines
+            if line.strip() not in volunteer_causes
+        ]
+        
 
         entries = []
         i = 0
