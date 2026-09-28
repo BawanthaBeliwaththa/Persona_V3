@@ -1647,11 +1647,7 @@ class LinkedInScraper:
 
 
                                 // Ignore expandable description paragraphs completely
-                                //
-                                // Example:
-                                // <span data-testid="expandable-text-box">
-                                //     SAIFA - Students' Association...
-                                // </span>
+                                
 
                                 const paragraphs = Array.from(
                                     block.querySelectorAll('p')
@@ -1681,16 +1677,7 @@ class LinkedInScraper:
 
                                 // ---------------------------------------------------------
                                 // Expected LinkedIn structure:
-                                //
-                                // President
-                                // SAIFA-University
-                                // 2017 – 2018
-                                // Science and Technology   <-- ignored
-                                //
-                                // We only need:
-                                // role
-                                // organization
-                                // duration
+
                                 // ---------------------------------------------------------
 
                                 for (const line of lines) {
@@ -1920,14 +1907,7 @@ class LinkedInScraper:
 
                                 // ---------------------------------------------------------
                                 // Find recommender title/headline
-                                //
-                                // Example:
-                                //
-                                // Shehan Bartholomeusz
-                                // · 3rd+
-                                // Software Engineer                 <-- title
-                                // September 4, 2025, Shehan...      <-- relationship
-                                // ---------------------------------------------------------
+
 
                                 for (const line of lines) {
 
