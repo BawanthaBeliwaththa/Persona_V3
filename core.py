@@ -1588,11 +1588,13 @@ class LinkedInScraper:
 
                         }''')
 
-                        global experience_list
-                        experience_list = experience_data
-                        # if experience_data:
-                        #     global experience_list
-                        #     experience_list = experience_data
+                        # global experience_list
+                        # experience_list = experience_data
+                        if experience_data:
+                            global experience_list
+                            experience_list = experience_data
+                        else:
+                            experience_list = []
                     # -------------------------------------------------------------------------------------
 
 
@@ -1744,11 +1746,13 @@ class LinkedInScraper:
                         }''')
 
 
-                        global volunteer_list
-                        volunteer_list = volunteer_data
-                        # if volunteer_data:
-                        #     global volunteer_list
-                        #     volunteer_list = volunteer_data
+                        # global volunteer_list
+                        # volunteer_list = volunteer_data
+                        if volunteer_data:
+                            global volunteer_list
+                            volunteer_list = volunteer_data
+                        else:
+                            volunteer_list = []
                             # print(volunteer_list)
 
                     # -------------------------------------------------------------------------------------
@@ -1971,13 +1975,11 @@ class LinkedInScraper:
                         }''')
 
 
-                        global recommendations_list
-                        recommendations_list = recommendations_data
-                        # if recommendations_data:
-                        #     global recommendations_list
-                        #     recommendations_list = recommendations_data
-                        # else:
-                        #     recommendations_list = []
+                        if recommendations_data:
+                            global recommendations_list
+                            recommendations_list = recommendations_data
+                        else:
+                            recommendations_list = []
 
                     # -------------------------------------------------------------------------------------
                     if section == 'contact_info':
@@ -2029,7 +2031,7 @@ class LinkedInScraper:
             # volunteer       = self._parse_volunteer(vol_text)
             volunteer       = volunteer_list
             honors          = self._parse_honors(hon_text)
-            # recommendations = self._parse_recommendations(rec_text)
+            recommendations = self._parse_recommendations(rec_text)
             recommendations = recommendations_list
 
             connections = raw.get('connections', '')
