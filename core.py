@@ -1188,6 +1188,135 @@ class LinkedInScraper:
 
                     # -------------------------------------------------------------------------------------
                     # Expirence: if linkdln update it's structure comment this to role back to old code
+                    if section == 'education':
+
+                        education_data = await self.page.evaluate('''() => {
+
+                            const results = [];
+
+                            const educationBlocks = document.querySelectorAll(
+                                '[componentkey^="entity-collection-item-"]'
+                            );
+
+                            // Helper: clean element text
+                            const getText = (el) => {
+
+                                if (!el) {
+                                    return '';
+                                }
+
+                                return (el.innerText || '')
+                                    .replace(/\\s+/g, ' ')
+                                    .trim();
+                            };
+
+                            // Helper: detect education date lines
+                            const isDateLine = (text) => {
+
+                                return /^(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\\s+\\d{4}\\s*[–-]\\s*(?:(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\\s+\\d{4}|Present)$/i.test(
+                                    text.trim()
+                                );
+                            };
+
+                            // Helper: ignore Skills paragraphs
+                            const shouldIgnoreParagraph = (p) => {
+
+                                const strongElements = Array.from(
+                                    p.querySelectorAll('strong')
+                                );
+
+                                const hasSkillsLabel = strongElements.some(strong => {
+
+                                    const text = (strong.innerText || '')
+                                        .trim()
+                                        .toLowerCase();
+
+                                    return text === 'skills:';
+                                });
+
+                                return hasSkillsLabel;
+                            };
+
+                            // Process every education block
+                            for (const block of educationBlocks) {
+
+                                const paragraphs = Array.from(
+                                    block.querySelectorAll('p')
+                                ).filter(p => {
+
+                                    // Ignore Skills
+                                    if (shouldIgnoreParagraph(p)) {
+                                        return false;
+                                    }
+
+                                    return true;
+                                });
+
+                                const lines = paragraphs
+                                    .map(getText)
+                                    .filter(Boolean);
+
+                                let institution = '';
+                                let degree = '';
+                                let dates = '';
+
+                                // Parse education
+                                for (const line of lines) {
+
+                                    // Date
+                                    if (isDateLine(line)) {
+
+                                        if (!dates) {
+                                            dates = line;
+                                        }
+
+                                        continue;
+                                    }
+
+                                    // First normal line = institution
+                                    if (!institution) {
+
+                                        institution = line;
+
+                                        continue;
+                                    }
+
+                                    // Second normal line = degree
+                                    if (!degree) {
+
+                                        degree = line;
+
+                                        continue;
+                                    }
+                                }
+
+                                // Add education entry
+                                if (institution) {
+
+                                    results.push({
+                                        institution: institution,
+                                        degree: degree,
+                                        dates: dates
+                                    });
+                                }
+                            }
+
+                            return results;
+
+                        }''')
+
+                        global education_list
+
+                        if education_data:
+                            education_list = education_data
+                        else:
+                            education_list = []
+
+
+
+
+                    # -------------------------------------------------------------------------------------
+                    # Expirence: if linkdln update it's structure comment this to role back to old code
                     if section == 'experience':
 
                         experience_data = await self.page.evaluate('''() => {
@@ -1590,8 +1719,8 @@ class LinkedInScraper:
 
                         # global experience_list
                         # experience_list = experience_data
+                        global experience_list
                         if experience_data:
-                            global experience_list
                             experience_list = experience_data
                         else:
                             experience_list = []
@@ -1599,8 +1728,259 @@ class LinkedInScraper:
 
 
                     # -------------------------------------------------------------------------------------
-                    # Volunteer Experience: if LinkedIn updates its structure, comment this to roll back
-                    # to the old parsing code
+                    # honors: if LinkedIn updates its structure, use the old parsing code
+
+                    if section == 'honors':
+
+                        honors_data = await self.page.evaluate('''() => {
+                            const results = [];
+
+                            const honorBlocks = document.querySelectorAll(
+                                '[componentkey^="entity-collection-item-"]'
+                            );
+
+                            // Helper: clean element text
+                            const getText = (el) => {
+                                if (!el) {
+                                    return '';
+                                }
+
+                                return (el.innerText || '')
+                                    .replace(/\\s+/g, ' ')
+                                    .trim();
+                            };
+
+                            // Helper: detect date
+                            const isDateLine = (text) => {
+                                return /^(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\\s+\\d{4}$/i.test(
+                                    text.trim()
+                                );
+                            };
+
+                            // Process every honor block
+                            for (const block of honorBlocks) {
+
+                                // Get paragraphs belonging to this honor
+                                const paragraphs = Array.from(
+                                    block.querySelectorAll('p')
+                                ).filter(p => {
+
+                                    // Ignore expandable descriptions
+                                    if (
+                                        p.querySelector(
+                                            '[data-testid="expandable-text-box"]'
+                                        )
+                                    ) {
+                                        return false;
+                                    }
+
+                                    const text = getText(p);
+
+                                    // Ignore empty paragraphs
+                                    if (!text) {
+                                        return false;
+                                    }
+
+                                    // Ignore "Associated with ..."
+                                    if (/^Associated with\\s+/i.test(text)) {
+                                        return false;
+                                    }
+
+                                    return true;
+                                });
+
+                                const lines = paragraphs
+                                    .map(getText)
+                                    .filter(Boolean);
+
+                                if (lines.length === 0) {
+                                    continue;
+                                }
+
+                                let title = '';
+                                let issuer = '';
+                                let date = '';
+
+                                // First normal line = title
+                                title = lines[0];
+
+                                // Process remaining lines
+                                for (const line of lines.slice(1)) {
+
+                                    // Date-only line
+                                    if (isDateLine(line)) {
+                                        if (!date) {
+                                            date = line;
+                                        }
+
+                                        continue;
+                                    }
+
+                                    // "Issued by ..." line
+                                    const issuedByMatch = line.match(
+                                        /^Issued by\\s+(.+?)\\s*·\\s*((?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\\s+\\d{4})$/i
+                                    );
+
+                                    if (issuedByMatch) {
+                                        issuer = issuedByMatch[1].trim();
+                                        date = issuedByMatch[2].trim();
+                                        continue;
+                                    }
+
+                                    // Fallback if issuer/date format is slightly different
+                                    if (/^Issued by\\s+/i.test(line)) {
+                                        issuer = line
+                                            .replace(/^Issued by\\s+/i, '')
+                                            .trim();
+
+                                        continue;
+                                    }
+                                }
+
+                                if (title) {
+                                    results.push({
+                                        title: title,
+                                        issuer: issuer,
+                                        date: date
+                                    });
+                                }
+                            }
+
+                            return results;
+
+                        }''')
+
+                        global honors_list
+                        if honors_data:
+                            honors_list = honors_data
+                        else:
+                            honors_list = []
+
+
+                    # -------------------------------------------------------------------------------------
+                    # certifications: if LinkedIn updates its structure, use the old parsing code
+                    if section == 'certifications':
+
+                        certifications_data = await self.page.evaluate('''() => {
+
+                            const results = [];
+
+                            const certificationBlocks = document.querySelectorAll(
+                                '[componentkey^="entity-collection-item-"]'
+                            );
+
+                            // Helper: clean element text
+                            const getText = (el) => {
+
+                                if (!el) {
+                                    return '';
+                                }
+
+                                return (el.innerText || '')
+                                    .replace(/\\s+/g, ' ')
+                                    .trim();
+                            };
+
+                            // Helper: detect certification date
+                            const isCertificationDate = (text) => {
+
+                                return /^Issued\\s+/i.test(text.trim());
+                            };
+
+                            // Process every certification block
+                            for (const block of certificationBlocks) {
+
+                                const paragraphs = Array.from(
+                                    block.querySelectorAll('p')
+                                ).filter(p => {
+
+                                    const text = getText(p);
+
+                                    // Ignore Skills section
+                                    const strong = p.querySelector('strong');
+
+                                    if (
+                                        strong &&
+                                        getText(strong).toLowerCase() === 'skills:'
+                                    ) {
+                                        return false;
+                                    }
+
+                                    // Ignore empty paragraphs
+                                    if (!text) {
+                                        return false;
+                                    }
+
+                                    // Ignore credential ID
+                                    if (/^Credential ID\\s*:/i.test(text)) {
+                                        return false;
+                                    }
+
+                                    return true;
+                                });
+
+                                const lines = paragraphs
+                                    .map(getText)
+                                    .filter(Boolean);
+
+                                let name = '';
+                                let issuer = '';
+                                let date = '';
+
+                                // Parse certification
+                                for (const line of lines) {
+
+                                    // Date
+                                    if (isCertificationDate(line)) {
+
+                                        if (!date) {
+                                            date = line;
+                                        }
+
+                                        continue;
+                                    }
+
+                                    // First normal line = certification name
+                                    if (!name) {
+
+                                        name = line;
+
+                                        continue;
+                                    }
+
+                                    // Second normal line = issuer
+                                    if (!issuer) {
+
+                                        issuer = line;
+
+                                        continue;
+                                    }
+                                }
+
+                                if (name) {
+
+                                    results.push({
+                                        name: name,
+                                        issuer: issuer,
+                                        date: date
+                                    });
+                                }
+                            }
+
+                            return results;
+
+                        }''')
+
+                        global certifications_list
+
+                        if certifications_data:
+                            certifications_list = certifications_data
+                        else:
+                            certifications_list = []
+
+
+                    # -------------------------------------------------------------------------------------
+                    # Volunteer Experience: if LinkedIn updates its structure, use the old parsing code
                     if section == 'volunteer':
 
                         volunteer_data = await self.page.evaluate('''() => {
@@ -1748,8 +2128,8 @@ class LinkedInScraper:
 
                         # global volunteer_list
                         # volunteer_list = volunteer_data
+                        global volunteer_list
                         if volunteer_data:
-                            global volunteer_list
                             volunteer_list = volunteer_data
                         else:
                             volunteer_list = []
@@ -1975,8 +2355,8 @@ class LinkedInScraper:
                         }''')
 
 
+                        global recommendations_list
                         if recommendations_data:
-                            global recommendations_list
                             recommendations_list = recommendations_data
                         else:
                             recommendations_list = []
@@ -2024,13 +2404,16 @@ class LinkedInScraper:
             current_job     = self._parse_experience(exp_text)
             # experience      = self._parse_all_experiences(exp_text) # Expirence: if linkdln update it's structure uncomment this to role back to old code
             experience      = experience_list # Expirence: if linkdln update it's structure comment this to role back to old code
-            qualifications  = self._parse_education(edu_text)
-            certifications  = self._parse_certifications(cert_text)
+            # qualifications  = self._parse_education(edu_text)
+            qualifications  = education_list
+            # certifications  = self._parse_certifications(cert_text)
+            certifications  = certifications_list
             skills          = self._parse_skills(skill_text)
             languages       = self._parse_languages(lang_text)
             # volunteer       = self._parse_volunteer(vol_text)
             volunteer       = volunteer_list
-            honors          = self._parse_honors(hon_text)
+            # honors          = self._parse_honors(hon_text)
+            honors          = honors_list
             # recommendations = self._parse_recommendations(rec_text)
             recommendations = recommendations_list
 
