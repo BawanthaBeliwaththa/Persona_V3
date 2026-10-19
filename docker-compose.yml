@@ -1,0 +1,16 @@
+services:
+  app:
+    build: .
+    container_name: myapp
+    shm_size: '256m'
+    environment:
+      - BROWSER_DATA_DIR=/app/browser_data
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./browser_data:/app/browser_data
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges
+    restart: unless-stopped
